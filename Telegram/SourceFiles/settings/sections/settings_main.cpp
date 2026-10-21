@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "settings/sections/settings_main.h"
 
+#include "beargram/beargram_settings_box.h"
 #include "settings/settings_common_session.h"
 
 #include "api/api_cloud_password.h"
@@ -437,6 +438,14 @@ void BuildSectionButtons(SectionBuilder &builder) {
 		.targetSection = AdvancedId(),
 		.icon = { &st::menuIconManage },
 		.keywords = { u"performance"_q, u"proxy"_q, u"experimental"_q },
+	});
+
+	builder.addButton({
+		.id = u"main/beargram"_q,
+		.title = rpl::single(u"BearGram"_q),
+		.icon = { &st::menuIconCustomize },
+		.onClick = [=] { controller->show(Box(BearGram::SettingsBox)); },
+		.keywords = { u"beargram"_q, u"collapse"_q },
 	});
 
 	builder.addSectionButton({

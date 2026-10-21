@@ -29,6 +29,10 @@ class RoundCheckbox;
 struct TornEdgeCache;
 } // namespace Ui
 
+namespace BearGram {
+struct CollapsedText;
+} // namespace BearGram
+
 namespace HistoryView {
 
 class ViewButton;
@@ -403,6 +407,8 @@ private:
 		Painter &p,
 		QRect &trect,
 		const PaintContext &context) const;
+	[[nodiscard]] BearGram::CollapsedText collapsedText(
+		int textWidth) const;
 	void paintText(
 		Painter &p,
 		QRect &trect,

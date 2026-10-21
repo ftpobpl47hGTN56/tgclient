@@ -237,6 +237,12 @@ PRIVATE
     api/api_websites.h
     api/api_who_reacted.cpp
     api/api_who_reacted.h
+    beargram/beargram_long_messages.cpp
+    beargram/beargram_long_messages.h
+    beargram/beargram_settings.cpp
+    beargram/beargram_settings.h
+    beargram/beargram_settings_box.cpp
+    beargram/beargram_settings_box.h
     boxes/filters/edit_filter_box.cpp
     boxes/filters/edit_filter_box.h
     boxes/filters/edit_filter_chats_list.cpp

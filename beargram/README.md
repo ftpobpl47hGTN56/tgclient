@@ -8,11 +8,20 @@ Personal Telegram Desktop build with its own name, icon and data folder.
   `Telegram/CMakeLists.txt`, `Telegram/Resources/winrc/Telegram.rc`).
 - Own app id, Start menu shortcut and notification id, so BearGram and the
   official Telegram Desktop can be installed and run side by side.
-- Data lives in `%APPDATA%\BearGram` instead of `%APPDATA%\Telegram Desktop`.
+- Data lives in a `tdata` folder next to `BearGram.exe`, or in
+  `%APPDATA%\BearGram` when that folder is not writable.
 - Icons in `Telegram/Resources/art` are generated from `beargram/icon_master.png`
   with `python beargram/make_icons.py`.
 - UI texts are not changed: the Russian and other interface languages are
   downloaded from Telegram servers, so editing `lang.strings` would only affect English.
+
+## Features
+
+All BearGram code lives in `Telegram/SourceFiles/beargram`. Settings open from
+Settings > BearGram and are stored in `tdata/beargram.json`.
+
+- Long messages: text longer than N lines (10-50, default 20) is collapsed to
+  a short preview with a "Развернуть" link and can be collapsed back.
 
 ## Configure (Windows, x64)
 

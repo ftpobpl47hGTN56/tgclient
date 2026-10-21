@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_suggest_post.h"
 #include "api/api_transcribes.h"
+#include "beargram/beargram_long_messages.h"
 #include "base/options.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "base/unixtime.h"
@@ -74,6 +75,18 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace HistoryView {
 namespace {
+
+[[nodiscard]] bool AllowsCollapse(Context context) {
+	switch (context) {
+	case Context::History:
+	case Context::Replies:
+	case Context::Pinned:
+	case Context::Monoforum:
+	case Context::SavedSublist:
+		return true;
+	}
+	return false;
+}
 
 base::options::toggle UnlimitedMessageWidth({
 	.id = kOptionUnlimitedMessageWidth,
@@ -3004,6 +3017,21 @@ void Message::paintViaBotIdInfo(
 	}
 }
 
+BearGram::CollapsedText Message::collapsedText(int textWidth) const {
+	if (!AllowsCollapse(context())
+		|| !hasVisibleText()
+		|| hasRichPage()
+		|| textWidth <= 0) {
+		return {};
+	}
+	return BearGram::ComputeCollapsedText(
+		data(),
+		text(),
+		textWidth,
+		textHeightFor(textWidth),
+		st::msgFont->height);
+}
+
 void Message::paintText(
 		Painter &p,
 		QRect &trect,
@@ -3100,6 +3128,7 @@ void Message::paintText(
 		});
 	}
 
+	const auto collapse = collapsedText(trect.width());
 	auto highlightRequest = context.computeHighlightCache();
 	text().draw(p, {
 		.position = trect.topLeft(),
@@ -3118,9 +3147,19 @@ void Message::paintText(
 		.highlight = needRippleMask
 			? &rippleRequest
 			: (highlightRequest ? &*highlightRequest : nullptr),
+		.elisionLines = collapse.visibleLines,
 		.useFullWidth = true,
 		.linePostprocess = linePostprocess ? &*linePostprocess : nullptr,
 	});
+	if (collapse.collapsible) {
+		p.setFont(st::msgFont);
+		p.setPen(stm->textPalette.linkFg);
+		p.drawTextLeft(
+			trect.x(),
+			trect.y() + collapse.toggleTop,
+			width(),
+			BearGram::ToggleText(collapse.expanded));
+	}
 	if (needRippleMask && !ripplePath.isEmpty()) {
 		createLinkRippleMask(
 			ripplePath,
@@ -4819,6 +4858,18 @@ bool Message::getStateText(
 	}
 	if (const auto botTop = Get<FakeBotAboutTop>()) {
 		trect.setY(trect.y() + botTop->height);
+	}
+	if (const auto collapse = collapsedText(trect.width())
+		; collapse.collapsible) {
+		const auto top = trect.y() + collapse.toggleTop;
+		const auto toggleWidth = st::msgFont->width(
+			BearGram::ToggleText(collapse.expanded));
+		if (base::in_range(point.y(), top, top + collapse.toggleHeight)
+			&& base::in_range(point.x(), trect.x(), trect.x() + toggleWidth)) {
+			*outResult = TextState(item);
+			outResult->link = BearGram::ToggleLink(data());
+			return true;
+		}
 	}
 	if (base::in_range(point.y(), trect.y(), trect.y() + trect.height())) {
 		*outResult = TextState(item, text().getState(
@@ -6839,6 +6890,10 @@ int Message::resizeContentGetHeight(int newWidth) {
 				}
 				newHeight += _reactions->height();
 			}
+		}
+		if (const auto collapse = collapsedText(textWidth)
+			; collapse.collapsible && !appearing) {
+			newHeight += collapse.totalHeight - textHeightFor(textWidth);
 		}
 
 		if (displayFromName()) {
