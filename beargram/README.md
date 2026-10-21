@@ -1,0 +1,29 @@
+# BearGram
+
+Personal Telegram Desktop build with its own name, icon and data folder.
+
+## What differs from upstream
+
+- App name `BearGram`, executable `BearGram.exe` (`Telegram/SourceFiles/core/version.h`,
+  `Telegram/CMakeLists.txt`, `Telegram/Resources/winrc/Telegram.rc`).
+- Own app id, Start menu shortcut and notification id, so BearGram and the
+  official Telegram Desktop can be installed and run side by side.
+- Data lives in `%APPDATA%\BearGram` instead of `%APPDATA%\Telegram Desktop`.
+- Icons in `Telegram/Resources/art` are generated from `beargram/icon_master.png`
+  with `python beargram/make_icons.py`.
+- UI texts are not changed: the Russian and other interface languages are
+  downloaded from Telegram servers, so editing `lang.strings` would only affect English.
+
+## Configure (Windows, x64)
+
+Run from `E:\TBuild\tdesktop\Telegram` in the build terminal:
+
+```bat
+configure.bat x64 -D TDESKTOP_API_ID=YOUR_API_ID -D TDESKTOP_API_HASH=YOUR_API_HASH -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON
+```
+
+`DESKTOP_APP_DISABLE_AUTOUPDATE=ON` is required: otherwise the built-in updater
+would download the official Telegram Desktop and replace BearGram with it.
+
+Then open `out\Telegram.slnx` in Visual Studio 2026 and build the `Telegram`
+project. The result is `out\Debug\BearGram.exe` (or `out\Release\BearGram.exe`).
