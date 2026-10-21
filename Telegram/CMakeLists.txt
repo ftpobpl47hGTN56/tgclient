@@ -2562,7 +2562,7 @@ if (WIN32)
         )
     endif()
 
-    target_link_options(Telegram PRIVATE /PDBPAGESIZE:8192)
+    target_link_options(Telegram PRIVATE /PDBPAGESIZE:16384)
 
     if (DESKTOP_APP_WIN7_BASELINE)
         # The loader reads the subsystem version as the minimal Windows.
