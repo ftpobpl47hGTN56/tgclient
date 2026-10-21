@@ -12,6 +12,8 @@ struct Settings {
 	bool collapseLongMessages = true;
 	int collapseAfterLines = 20;
 	int collapsedPreviewLines = 6;
+	bool hideBlockedUsers = true;
+	bool hideAdPosts = true;
 };
 
 [[nodiscard]] const Settings &Current();

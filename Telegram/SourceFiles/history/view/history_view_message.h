@@ -407,6 +407,7 @@ private:
 		Painter &p,
 		QRect &trect,
 		const PaintContext &context) const;
+	[[nodiscard]] bool isHidden() const override;
 	[[nodiscard]] BearGram::CollapsedText collapsedText(
 		int textWidth) const;
 	void paintText(

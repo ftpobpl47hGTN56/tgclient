@@ -237,6 +237,8 @@ PRIVATE
     api/api_websites.h
     api/api_who_reacted.cpp
     api/api_who_reacted.h
+    beargram/beargram_filters.cpp
+    beargram/beargram_filters.h
     beargram/beargram_long_messages.cpp
     beargram/beargram_long_messages.h
     beargram/beargram_settings.cpp

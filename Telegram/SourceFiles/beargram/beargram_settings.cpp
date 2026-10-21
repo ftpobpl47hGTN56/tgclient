@@ -35,6 +35,10 @@ constexpr auto kMaxLines = 200;
 	};
 	result.collapseLongMessages = object.value(
 		u"collapseLongMessages"_q).toBool(result.collapseLongMessages);
+	result.hideBlockedUsers = object.value(
+		u"hideBlockedUsers"_q).toBool(result.hideBlockedUsers);
+	result.hideAdPosts = object.value(
+		u"hideAdPosts"_q).toBool(result.hideAdPosts);
 	result.collapseAfterLines = readInt(
 		u"collapseAfterLines"_q,
 		result.collapseAfterLines);
@@ -48,6 +52,8 @@ void Save(const Settings &settings) {
 	auto object = QJsonObject();
 	object.insert(u"collapseLongMessages"_q, settings.collapseLongMessages);
 	object.insert(u"collapseAfterLines"_q, settings.collapseAfterLines);
+	object.insert(u"hideBlockedUsers"_q, settings.hideBlockedUsers);
+	object.insert(u"hideAdPosts"_q, settings.hideAdPosts);
 	object.insert(
 		u"collapsedPreviewLines"_q,
 		settings.collapsedPreviewLines);

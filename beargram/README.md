@@ -22,6 +22,8 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
 
 - Long messages: text longer than N lines (10-50, default 20) is collapsed to
   a short preview with a "Развернуть" link and can be collapsed back.
+- Filters: messages from blocked users in groups and channel posts marked as
+  ads (`erid`, `#реклама`, "Реклама ... ИНН") are hidden. Own messages never are.
 
 ## Configure (Windows, x64)
 

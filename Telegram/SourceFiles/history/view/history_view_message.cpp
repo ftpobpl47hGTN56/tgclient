@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_suggest_post.h"
 #include "api/api_transcribes.h"
+#include "beargram/beargram_filters.h"
 #include "beargram/beargram_long_messages.h"
 #include "base/options.h"
 #include "base/qt/qt_key_modifiers.h"
@@ -3015,6 +3016,12 @@ void Message::paintViaBotIdInfo(
 			trect.setY(trect.y() + st::msgServiceNameFont->height);
 		}
 	}
+}
+
+bool Message::isHidden() const {
+	return Element::isHidden()
+		|| (AllowsCollapse(context())
+			&& BearGram::IsFilteredOut(data(), textItem()));
 }
 
 BearGram::CollapsedText Message::collapsedText(int textWidth) const {

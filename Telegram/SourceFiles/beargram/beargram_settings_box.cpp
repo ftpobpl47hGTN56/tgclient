@@ -41,6 +41,21 @@ void AddLinesChoice(
 	group->setChangedCallback(std::move(save));
 }
 
+void AddToggle(
+		not_null<Ui::VerticalLayout*> container,
+		const QString &title,
+		bool current,
+		Fn<void(bool)> save) {
+	const auto button = container->add(object_ptr<Ui::SettingsButton>(
+		container,
+		rpl::single(title),
+		st::settingsButtonNoIcon
+	))->toggleOn(rpl::single(current));
+	button->toggledChanges() | rpl::on_next([=](bool enabled) {
+		save(enabled);
+	}, button->lifetime());
+}
+
 } // namespace
 
 void SettingsBox(not_null<Ui::GenericBox*> box) {
@@ -50,19 +65,41 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 	const auto container = box->verticalLayout();
 	const auto &current = Current();
 
+	Ui::AddSubsectionTitle(container, rpl::single(u"Фильтры"_q));
+	AddToggle(
+		container,
+		u"Скрывать сообщения заблокированных"_q,
+		current.hideBlockedUsers,
+		[](bool enabled) {
+			Update([&](Settings &settings) {
+				settings.hideBlockedUsers = enabled;
+			});
+		});
+	AddToggle(
+		container,
+		u"Скрывать рекламные посты (erid, «Реклама»)"_q,
+		current.hideAdPosts,
+		[](bool enabled) {
+			Update([&](Settings &settings) {
+				settings.hideAdPosts = enabled;
+			});
+		});
+
+	Ui::AddSkip(container);
+	Ui::AddDivider(container);
+	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(
 		container,
 		rpl::single(u"Длинные сообщения"_q));
-	const auto collapse = container->add(object_ptr<Ui::SettingsButton>(
+	AddToggle(
 		container,
-		rpl::single(u"Сворачивать длинные сообщения"_q),
-		st::settingsButtonNoIcon
-	))->toggleOn(rpl::single(current.collapseLongMessages));
-	collapse->toggledChanges() | rpl::on_next([](bool enabled) {
-		Update([&](Settings &settings) {
-			settings.collapseLongMessages = enabled;
+		u"Сворачивать длинные сообщения"_q,
+		current.collapseLongMessages,
+		[](bool enabled) {
+			Update([&](Settings &settings) {
+				settings.collapseLongMessages = enabled;
+			});
 		});
-	}, collapse->lifetime());
 
 	AddLinesChoice(
 		container,
@@ -88,9 +125,8 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 	Ui::AddSkip(container);
 	Ui::AddDividerText(
 		container,
-		rpl::single(u"Под свёрнутым сообщением появится ссылка "
-			"«Развернуть». Изменения применятся к чатам "
-			"после их повторного открытия."_q));
+		rpl::single(u"Изменения применятся к чатам после их повторного "
+			"открытия. Свои сообщения никогда не скрываются."_q));
 
 	box->addButton(tr::lng_box_ok(), [=] { box->closeBox(); });
 }
