@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_blocked_peers.h"
 #include "apiwrap.h"
+#include "beargram/beargram_local_hide.h"
 #include "beargram/beargram_settings.h"
 #include "data/data_channel.h"
 #include "data/data_peer.h"
@@ -140,7 +141,10 @@ void LoadBlocked(
 bool IsFilteredOut(
 		not_null<const HistoryItem*> item,
 		const HistoryItem *textItem) {
-	if (item->out() || !item->isRegular()) {
+	if (IsHiddenLocally(item)
+		|| (textItem && textItem != item && IsHiddenLocally(textItem))) {
+		return true;
+	} else if (item->out() || !item->isRegular()) {
 		return false;
 	}
 	const auto &settings = Current();

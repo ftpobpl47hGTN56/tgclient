@@ -6,6 +6,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "beargram/beargram_settings_box.h"
 
+#include "beargram/beargram_local_hide.h"
 #include "beargram/beargram_settings.h"
 #include "lang/lang_keys.h"
 #include "ui/layers/generic_box.h"
@@ -56,6 +57,20 @@ void AddToggle(
 	}, button->lifetime());
 }
 
+void AddResetButton(
+		not_null<Ui::VerticalLayout*> container,
+		const QString &title,
+		Fn<void()> reset) {
+	const auto button = container->add(object_ptr<Ui::SettingsButton>(
+		container,
+		rpl::single(title),
+		st::settingsButtonNoIcon));
+	button->addClickHandler([=] {
+		reset();
+		button->setText(TextWithEntities{ u"Готово: переоткройте чат"_q });
+	});
+}
+
 } // namespace
 
 void SettingsBox(not_null<Ui::GenericBox*> box) {
@@ -93,6 +108,19 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 				settings.hideNoCommentsPosts = enabled;
 			});
 		});
+
+	Ui::AddSkip(container);
+	Ui::AddDivider(container);
+	Ui::AddSkip(container);
+	Ui::AddSubsectionTitle(container, rpl::single(u"Скрытое у себя"_q));
+	AddResetButton(
+		container,
+		u"Показать скрытые сообщения (%1)"_q.arg(HiddenMessagesCount()),
+		ShowAllHiddenMessages);
+	AddResetButton(
+		container,
+		u"Показать скрытых пользователей (%1)"_q.arg(HiddenSendersCount()),
+		ShowAllHiddenSenders);
 
 	Ui::AddSkip(container);
 	Ui::AddDivider(container);

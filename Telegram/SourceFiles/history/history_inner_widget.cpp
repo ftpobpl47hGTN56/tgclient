@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
+#include "beargram/beargram_local_hide.h"
 #include "beargram/beargram_mass_delete.h"
 #include "window/window_controller.h"
 #include "window/window_peer_menu.h"
@@ -3447,6 +3448,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}, &st::menuIconDelete);
 			}
 			addUnpinSelectedAction();
+			BearGram::AddHideSelectedAction(
+				_menu.get(),
+				&session(),
+				getSelectedItems(),
+				[=] { _widget->clearSelected(); });
 			if (selectedState.count > 0 && !hasCopyRestrictionForSelected()) {
 				Menu::AddDownloadFilesAction(
 					_menu,
@@ -3496,6 +3502,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					}
 				}
 				if (!item->isUploading()) {
+					BearGram::AddLocalHideActions(_menu.get(), item);
 					BearGram::AddMassDeleteActions(
 						_menu.get(),
 						_controller->uiShow(),
@@ -3756,6 +3763,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}, &st::menuIconDelete);
 			}
 			addUnpinSelectedAction();
+			BearGram::AddHideSelectedAction(
+				_menu.get(),
+				&session(),
+				getSelectedItems(),
+				[=] { _widget->clearSelected(); });
 			if (selectedState.count > 0 && !hasCopyRestrictionForSelected()) {
 				Menu::AddDownloadFilesAction(
 					_menu,
