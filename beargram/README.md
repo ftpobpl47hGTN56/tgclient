@@ -31,6 +31,8 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   for one message, "Удалить выбранные у себя" for a selection, "Удалить у себя
   всё от ..." for a sender in groups and channels' comments.
 
+- Up to 6 accounts without Telegram Premium (`Main::Domain::maxAccounts()`).
+
 ## Configure (Windows, x64)
 
 Run from `E:\TBuild\tdesktop\Telegram` in the build terminal:
