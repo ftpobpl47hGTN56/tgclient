@@ -84,6 +84,15 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 				settings.hideAdPosts = enabled;
 			});
 		});
+	AddToggle(
+		container,
+		u"Скрывать посты каналов с закрытыми комментариями"_q,
+		current.hideNoCommentsPosts,
+		[](bool enabled) {
+			Update([&](Settings &settings) {
+				settings.hideNoCommentsPosts = enabled;
+			});
+		});
 
 	Ui::AddSkip(container);
 	Ui::AddDivider(container);

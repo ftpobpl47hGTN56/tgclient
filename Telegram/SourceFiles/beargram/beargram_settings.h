@@ -14,6 +14,7 @@ struct Settings {
 	int collapsedPreviewLines = 6;
 	bool hideBlockedUsers = true;
 	bool hideAdPosts = true;
+	bool hideNoCommentsPosts = true;
 };
 
 [[nodiscard]] const Settings &Current();

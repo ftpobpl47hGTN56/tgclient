@@ -39,6 +39,8 @@ constexpr auto kMaxLines = 200;
 		u"hideBlockedUsers"_q).toBool(result.hideBlockedUsers);
 	result.hideAdPosts = object.value(
 		u"hideAdPosts"_q).toBool(result.hideAdPosts);
+	result.hideNoCommentsPosts = object.value(
+		u"hideNoCommentsPosts"_q).toBool(result.hideNoCommentsPosts);
 	result.collapseAfterLines = readInt(
 		u"collapseAfterLines"_q,
 		result.collapseAfterLines);
@@ -54,6 +56,7 @@ void Save(const Settings &settings) {
 	object.insert(u"collapseAfterLines"_q, settings.collapseAfterLines);
 	object.insert(u"hideBlockedUsers"_q, settings.hideBlockedUsers);
 	object.insert(u"hideAdPosts"_q, settings.hideAdPosts);
+	object.insert(u"hideNoCommentsPosts"_q, settings.hideNoCommentsPosts);
 	object.insert(
 		u"collapsedPreviewLines"_q,
 		settings.collapsedPreviewLines);

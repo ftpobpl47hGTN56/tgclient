@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_blocked_peers.h"
 #include "apiwrap.h"
 #include "beargram/beargram_settings.h"
+#include "data/data_channel.h"
 #include "data/data_peer.h"
 #include "history/history.h"
 #include "history/history_item.h"
@@ -86,9 +87,14 @@ void LoadBlocked(
 		u"(^|\\n)\\s*Реклама[.,:\\s][^\\n]*ИНН"_q,
 		QRegularExpression::CaseInsensitiveOption
 			| QRegularExpression::UseUnicodePropertiesOption);
+	static const auto footer = QRegularExpression(
+		u"(^|\\n)\\s*#?Реклама\\.?\\s*$"_q,
+		QRegularExpression::CaseInsensitiveOption
+			| QRegularExpression::UseUnicodePropertiesOption);
 	if (text.text.contains(erid)
 		|| text.text.contains(hashtag)
-		|| text.text.contains(legal)) {
+		|| text.text.contains(legal)
+		|| text.text.contains(footer)) {
 		return true;
 	}
 	for (const auto &entity : text.entities) {
@@ -118,6 +124,17 @@ void LoadBlocked(
 	return ad;
 }
 
+[[nodiscard]] bool HasClosedComments(not_null<const HistoryItem*> item) {
+	const auto channel = item->history()->peer->asBroadcast();
+	if (!channel
+		|| !channel->discussionLinkKnown()
+		|| !channel->discussionLink()
+		|| item->isPinned()) {
+		return false;
+	}
+	return !item->repliesAreComments();
+}
+
 } // namespace
 
 bool IsFilteredOut(
@@ -130,6 +147,9 @@ bool IsFilteredOut(
 	if (settings.hideBlockedUsers
 		&& !item->history()->peer->isUser()
 		&& IsBlockedSender(item)) {
+		return true;
+	}
+	if (settings.hideNoCommentsPosts && HasClosedComments(item)) {
 		return true;
 	}
 	const auto source = textItem ? textItem : item.get();
