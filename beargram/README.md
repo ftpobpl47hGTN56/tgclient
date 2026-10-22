@@ -27,6 +27,9 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   hidden. Own messages never are.
 - Channel posts with comments turned off are hidden when the channel has a
   discussion group (pinned posts are kept).
+- Mass delete (message context menu in groups): "Удалить все мои сообщения
+  здесь" for own messages, and "Удалить все сообщения от ..." for group admins
+  who can delete messages. Both ask for confirmation first.
 
 ## Configure (Windows, x64)
 

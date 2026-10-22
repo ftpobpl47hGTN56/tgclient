@@ -241,6 +241,8 @@ PRIVATE
     beargram/beargram_filters.h
     beargram/beargram_long_messages.cpp
     beargram/beargram_long_messages.h
+    beargram/beargram_mass_delete.cpp
+    beargram/beargram_mass_delete.h
     beargram/beargram_settings.cpp
     beargram/beargram_settings.h
     beargram/beargram_settings_box.cpp

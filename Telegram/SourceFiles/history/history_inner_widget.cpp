@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
+#include "beargram/beargram_mass_delete.h"
 #include "window/window_controller.h"
 #include "window/window_peer_menu.h"
 #include "window/notifications_manager.h"
@@ -3493,6 +3494,12 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 							item->ttlDestroyAt(),
 							[=] { _menu = nullptr; }));
 					}
+				}
+				if (!item->isUploading()) {
+					BearGram::AddMassDeleteActions(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
 				}
 				if (!blockSender && item->suggestReport()) {
 					_menu->addAction(tr::lng_context_report_msg(tr::now), [=] {
