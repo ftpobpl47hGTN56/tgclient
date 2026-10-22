@@ -31,9 +31,4 @@ void AddHideSelectedAction(
 	MessageIdsList ids,
 	Fn<void()> clearSelection);
 
-[[nodiscard]] int HiddenMessagesCount();
-[[nodiscard]] int HiddenSendersCount();
-void ShowAllHiddenMessages();
-void ShowAllHiddenSenders();
-
 } // namespace BearGram

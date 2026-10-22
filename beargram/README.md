@@ -27,13 +27,9 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   hidden. Own messages never are.
 - Channel posts with comments turned off are hidden when the channel has a
   discussion group (pinned posts are kept).
-- Local hiding (only on this device): "Скрыть у себя" for one message,
-  "Скрыть выбранные у себя" for a selection, "Скрыть все сообщения от ..." for
-  a sender in groups. Stored in `tdata/beargram_hidden.json`, can be reset in
-  Settings > BearGram.
-- Mass delete (message context menu in groups): "Удалить все мои сообщения
-  здесь" for own messages, and "Удалить все сообщения от ..." for group admins
-  who can delete messages. Both ask for confirmation first.
+- Delete locally (only in this session, back after restart): "Удалить у себя"
+  for one message, "Удалить выбранные у себя" for a selection, "Удалить у себя
+  всё от ..." for a sender in groups and channels' comments.
 
 ## Configure (Windows, x64)
 
