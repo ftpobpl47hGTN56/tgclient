@@ -3819,6 +3819,13 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 							[=] { _menu = nullptr; }));
 					}
 				}
+				if (!item->isUploading()) {
+					BearGram::AddLocalHideActions(_menu.get(), item);
+					BearGram::AddMassDeleteActions(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
+				}
 				if (!canBlockSender && canReport) {
 					_menu->addAction(tr::lng_context_report_msg(tr::now), [=] {
 						reportAsGroup(itemId);
