@@ -3450,7 +3450,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			addUnpinSelectedAction();
 			BearGram::AddHideSelectedAction(
 				_menu.get(),
-				&session(),
+				session,
 				getSelectedItems(),
 				[=] { _widget->clearSelected(); });
 			if (selectedState.count > 0 && !hasCopyRestrictionForSelected()) {
@@ -3765,7 +3765,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			addUnpinSelectedAction();
 			BearGram::AddHideSelectedAction(
 				_menu.get(),
-				&session(),
+				session,
 				getSelectedItems(),
 				[=] { _widget->clearSelected(); });
 			if (selectedState.count > 0 && !hasCopyRestrictionForSelected()) {

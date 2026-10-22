@@ -61,13 +61,15 @@ void AddResetButton(
 		not_null<Ui::VerticalLayout*> container,
 		const QString &title,
 		Fn<void()> reset) {
+	const auto text = container->lifetime().make_state<
+		rpl::variable<QString>>(title);
 	const auto button = container->add(object_ptr<Ui::SettingsButton>(
 		container,
-		rpl::single(title),
+		text->value(),
 		st::settingsButtonNoIcon));
 	button->addClickHandler([=] {
 		reset();
-		button->setText(TextWithEntities{ u"Готово: переоткройте чат"_q });
+		*text = u"Готово: переоткройте чат"_q;
 	});
 }
 
