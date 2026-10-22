@@ -35,6 +35,7 @@ public:
 	void rowClicked(not_null<PeerListRow*> row) override;
 	void rowRightActionClicked(not_null<PeerListRow*> row) override;
 	void loadMoreRows() override;
+	void loadAll();
 
 	[[nodiscard]] rpl::producer<int> rowsCountChanges() const;
 
@@ -52,6 +53,7 @@ private:
 
 	int _offset = 0;
 	bool _allLoaded = false;
+	bool _loadAll = false;
 
 	base::has_weak_ptr _guard;
 

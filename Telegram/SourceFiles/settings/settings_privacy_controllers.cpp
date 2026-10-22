@@ -376,6 +376,11 @@ void BlockedBoxController::loadMoreRows() {
 		}));
 }
 
+void BlockedBoxController::loadAll() {
+	_loadAll = true;
+	loadMoreRows();
+}
+
 void BlockedBoxController::rowClicked(not_null<PeerListRow*> row) {
 	const auto peer = row->peer();
 	const auto window = _window;
@@ -406,6 +411,9 @@ void BlockedBoxController::applySlice(
 		_allLoaded = true;
 	}
 	delegate()->peerListRefreshRows();
+	if (_loadAll && !_allLoaded) {
+		loadMoreRows();
+	}
 }
 
 void BlockedBoxController::handleBlockedEvent(not_null<PeerData*> user) {

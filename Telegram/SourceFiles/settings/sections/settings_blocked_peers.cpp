@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_common.h"
 #include "settings/settings_privacy_controllers.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/fields/input_field.h"
 #include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
@@ -190,6 +191,13 @@ void Blocked::setupContent() {
 		auto controller = std::make_unique<BlockedBoxController>(
 			this->controller());
 		controller->setStyleOverrides(&st::settingsBlockedList);
+		const auto search = listWrap->entity()->add(
+			object_ptr<Ui::InputField>(
+				listWrap->entity(),
+				st::defaultInputField,
+				rpl::single(u"Поиск по имени или @username"_q)),
+			st::boxRowPadding);
+		Ui::AddSkip(listWrap->entity());
 		const auto content = listWrap->entity()->add(
 			object_ptr<PeerListContent>(this, controller.get()));
 
@@ -199,6 +207,18 @@ void Blocked::setupContent() {
 
 		state->delegate->setContent(content);
 		state->controller->setDelegate(state->delegate.get());
+
+		state->delegate->peerListSetSearchMode(PeerListSearchMode::Enabled);
+		const auto controllerRaw = state->controller.get();
+		controllerRaw->loadAll();
+		search->changes() | rpl::on_next([=] {
+			auto query = search->getLastText().trimmed();
+			if (query.startsWith('@')) {
+				query = query.mid(1);
+			}
+			content->searchQueryChanged(QString());
+			content->searchQueryChanged(query);
+		}, search->lifetime());
 	}
 
 	const auto emptyWrap = _container->add(

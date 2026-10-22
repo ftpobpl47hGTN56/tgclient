@@ -31,6 +31,7 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   for one message, "Удалить выбранные у себя" for a selection, "Удалить у себя
   всё от ..." for a sender in groups and channels' comments.
 
+- Search field in Settings > Privacy > Blocked users (loads the whole list).
 - Up to 6 accounts without Telegram Premium (`Main::Domain::maxAccounts()`).
 
 ## Configure (Windows, x64)
