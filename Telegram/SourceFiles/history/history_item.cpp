@@ -3539,7 +3539,12 @@ bool HistoryItem::suggestReport() const {
 	} else if (_history->peer->isChannel()) {
 		return true;
 	} else if (const auto user = _history->peer->asUser()) {
-		return user->isBot();
+		// BearGram: allow reporting messages in private chats too.
+		return user->isBot()
+			|| !(user->isSelf()
+				|| user->isServiceUser()
+				|| user->isVerifyCodes()
+				|| user->isRepliesChat());
 	}
 	return false;
 }

@@ -32,6 +32,8 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   всё от ..." for a sender in groups and channels' comments.
 
 - Search field in Settings > Privacy > Blocked users (loads the whole list).
+- "Report" for users in private chats: in the profile / chat menu and on
+  single messages (`Filler::addReport`, `HistoryItem::suggestReport`).
 - Up to 15 accounts without Telegram Premium (`Main::Domain::kPremiumMaxAccounts`).
 
 ## Configure (Windows, x64)

@@ -1100,9 +1100,20 @@ void Filler::addTranslate() {
 void Filler::addReport() {
 	const auto chat = _peer->asChat();
 	const auto channel = _peer->asChannel();
-	if (_topic
-		|| ((!chat || chat->amCreator())
-			&& (!channel || channel->amCreator()))) {
+	const auto user = _peer->asUser();
+	if (_topic) {
+		return;
+	} else if (user) {
+		// BearGram: "Report" for users and bots in profile and chat menus.
+		if (user->isSelf()
+			|| user->isServiceUser()
+			|| user->isVerifyCodes()
+			|| user->isRepliesChat()
+			|| user->isInaccessible()) {
+			return;
+		}
+	} else if ((!chat || chat->amCreator())
+		&& (!channel || channel->amCreator())) {
 		return;
 	}
 	const auto peer = _peer;
