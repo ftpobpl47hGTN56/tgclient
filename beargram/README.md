@@ -32,7 +32,7 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   всё от ..." for a sender in groups and channels' comments.
 
 - Search field in Settings > Privacy > Blocked users (loads the whole list).
-- Up to 6 accounts without Telegram Premium (`Main::Domain::maxAccounts()`).
+- Up to 15 accounts without Telegram Premium (`Main::Domain::kPremiumMaxAccounts`).
 
 ## Configure (Windows, x64)
 

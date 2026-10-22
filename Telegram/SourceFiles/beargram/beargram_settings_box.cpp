@@ -59,7 +59,7 @@ void AddToggle(
 } // namespace
 
 void SettingsBox(not_null<Ui::GenericBox*> box) {
-	box->setTitle(rpl::single(u"BearGram (сборка 8)"_q));
+	box->setTitle(rpl::single(u"BearGram (сборка 9)"_q));
 	box->setWidth(st::boxWideWidth);
 
 	const auto container = box->verticalLayout();
