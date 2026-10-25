@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/components/sponsored_messages.h"
 
+#include "beargram/beargram_settings.h"
 #include "api/api_text_entities.h"
 #include "api/api_peer_search.h" // SponsoredSearchResult
 #include "apiwrap.h"
@@ -302,7 +303,9 @@ HistoryItem *SponsoredMessages::injectItem(
 }
 
 bool SponsoredMessages::canHaveFor(not_null<History*> history) const {
-	if (history->peer->isChannel()) {
+	if (BearGram::Current().hideSponsored) {
+		return false; // BearGram: Telegram sponsored messages are hidden.
+	} else if (history->peer->isChannel()) {
 		return true;
 	} else if (const auto user = history->peer->asUser()) {
 		return user->isBot();
@@ -311,7 +314,8 @@ bool SponsoredMessages::canHaveFor(not_null<History*> history) const {
 }
 
 bool SponsoredMessages::canHaveFor(not_null<HistoryItem*> item) const {
-	return item->history()->peer->isBroadcast()
+	return !BearGram::Current().hideSponsored
+		&& item->history()->peer->isBroadcast()
 		&& item->isRegular();
 }
 

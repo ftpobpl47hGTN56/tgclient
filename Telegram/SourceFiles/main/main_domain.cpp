@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "main/main_domain.h"
 
+#include "beargram/beargram_settings.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/shortcuts.h"
@@ -612,7 +613,11 @@ void Domain::scheduleWriteAccounts() {
 }
 
 int Domain::maxAccounts() const {
-	return kPremiumMaxAccounts; // BearGram: no Premium requirement
+	// BearGram: no Premium requirement, the limit is set in BearGram settings.
+	return std::clamp(
+		BearGram::Current().maxAccounts,
+		1,
+		int(kPremiumMaxAccounts));
 }
 
 rpl::producer<int> Domain::maxAccountsChanges() const {

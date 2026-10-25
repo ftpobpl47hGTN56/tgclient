@@ -47,6 +47,20 @@ constexpr auto kMaxLines = 200;
 	result.collapsedPreviewLines = readInt(
 		u"collapsedPreviewLines"_q,
 		result.collapsedPreviewLines);
+	result.hideSponsored = object.value(
+		u"hideSponsored"_q).toBool(result.hideSponsored);
+	result.maxAccounts = std::clamp(
+		object.value(u"maxAccounts"_q).toInt(result.maxAccounts),
+		1,
+		kMaxAccountsLimit);
+	result.logPrivateMode = std::clamp(
+		object.value(u"logPrivateMode"_q).toInt(result.logPrivateMode),
+		0,
+		2);
+	result.logGroupsMode = std::clamp(
+		object.value(u"logGroupsMode"_q).toInt(result.logGroupsMode),
+		0,
+		2);
 	return result;
 }
 
@@ -60,6 +74,10 @@ void Save(const Settings &settings) {
 	object.insert(
 		u"collapsedPreviewLines"_q,
 		settings.collapsedPreviewLines);
+	object.insert(u"hideSponsored"_q, settings.hideSponsored);
+	object.insert(u"maxAccounts"_q, settings.maxAccounts);
+	object.insert(u"logPrivateMode"_q, settings.logPrivateMode);
+	object.insert(u"logGroupsMode"_q, settings.logGroupsMode);
 	auto file = QFile(SettingsPath());
 	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
 		file.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
