@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
 
+#include "beargram/beargram_deleted_log.h"
 #include "beargram/beargram_nicknames.h"
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
@@ -334,6 +335,7 @@ private:
 	void addTranslate();
 	void addReport();
 	void addBearGramNickname();
+	void addBearGramLogToggle();
 	void addNewContact();
 	void addShareContact();
 	void addEditContact();
@@ -1134,6 +1136,20 @@ void Filler::addBearGramNickname() {
 	_addAction(u"Локальное имя"_q, [=] {
 		BearGram::ShowNicknameBox(controller->uiShow(), user);
 	}, &st::menuIconEdit);
+}
+
+void Filler::addBearGramLogToggle() {
+	if (_topic || BearGram::ModeFor(_peer) == BearGram::LogMode::Off) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto controller = _controller;
+	_addAction(BearGram::TrackMenuText(peer), [=] {
+		const auto tracked = BearGram::ToggleTracked(peer);
+		controller->showToast(tracked
+			? u"Удалённые сообщения этого чата будут сохраняться"_q
+			: u"Удалённые сообщения этого чата не сохраняются"_q);
+	}, &st::menuIconArchive);
 }
 
 void Filler::addNewContact() {
@@ -1976,6 +1992,7 @@ void Filler::fillHistoryActions() {
 	addExportChat();
 	addTranslate();
 	addBearGramNickname();
+	addBearGramLogToggle();
 	addReport();
 	addClearHistory();
 	addDeleteChat();

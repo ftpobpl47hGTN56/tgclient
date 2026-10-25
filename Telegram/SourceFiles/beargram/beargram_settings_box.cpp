@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_settings_box.h"
 
 #include "beargram/beargram_settings.h"
+#include "beargram/beargram_deleted_log.h"
+#include "ui/boxes/confirm_box.h"
+#include "ui/layers/show.h"
 #include "lang/lang_keys.h"
 #include "ui/layers/generic_box.h"
 #include "ui/widgets/buttons.h"
@@ -60,6 +63,32 @@ void AddToggle(
 	button->toggledChanges() | rpl::on_next([=](bool enabled) {
 		save(enabled);
 	}, button->lifetime());
+}
+
+void AddModeChoice(
+		not_null<Ui::VerticalLayout*> container,
+		const QString &title,
+		int current,
+		Fn<void(int)> save) {
+	Ui::AddSkip(container);
+	Ui::AddSubsectionTitle(container, rpl::single(title));
+	const auto group = std::make_shared<Ui::RadiobuttonGroup>(current);
+	const auto labels = std::vector<QString>{
+		u"Выключено"_q,
+		u"Только выбранные чаты"_q,
+		u"Все, кроме исключений"_q,
+	};
+	for (auto i = 0; i != int(labels.size()); ++i) {
+		container->add(
+			object_ptr<Ui::Radiobutton>(
+				container,
+				group,
+				i,
+				labels[i],
+				st::settingsCheckbox),
+			st::settingsSendTypePadding);
+	}
+	group->setChangedCallback(std::move(save));
 }
 
 void AddIntSlider(
@@ -180,6 +209,50 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 		container,
 		rpl::single(u"Сколько аккаунтов можно добавить без Telegram Premium. "
 			"Уже добавленные аккаунты лимит не удаляет."_q));
+
+	AddModeChoice(
+		container,
+		u"Сохранять удалённые: личные чаты"_q,
+		current.logPrivateMode,
+		[](int value) {
+			Update([&](Settings &settings) {
+				settings.logPrivateMode = value;
+			});
+		});
+	AddModeChoice(
+		container,
+		u"Сохранять удалённые: группы и каналы"_q,
+		current.logGroupsMode,
+		[](int value) {
+			Update([&](Settings &settings) {
+				settings.logGroupsMode = value;
+			});
+		});
+	Ui::AddSkip(container);
+	const auto clear = container->add(object_ptr<Ui::SettingsButton>(
+		container,
+		rpl::single(u"Очистить сохранённые удалённые и правки"_q),
+		st::settingsAttentionButton));
+	clear->setClickedCallback([=] {
+		box->uiShow()->show(Ui::MakeConfirmBox({
+			.text = u"Все сохранённые удалённые сообщения исчезнут из чатов, "
+				"история правок будет стёрта. Отменить это нельзя."_q,
+			.confirmed = [](Fn<void()> close) {
+				ClearAll();
+				close();
+			},
+			.confirmText = u"Очистить"_q,
+			.confirmStyle = &st::attentionBoxButton,
+		}));
+	});
+	Ui::AddSkip(container);
+	Ui::AddDividerText(
+		container,
+		rpl::single(u"Удалённые сообщения остаются в чате с пометкой «удалено» "
+			"до перезапуска BearGram (на ПК Telegram не хранит переписку на "
+			"диске). История правок хранится постоянно: «История правок» в "
+			"меню сообщения. В меню ⋮ чата есть «Сохранять удалённые» — он "
+			"добавляет чат в список или убирает из него."_q));
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(

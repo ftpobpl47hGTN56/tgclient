@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_session.h"
 
+#include "beargram/beargram_deleted_log.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "main/main_app_config.h"
@@ -3066,7 +3067,10 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 	}, [&](const MTPDmessageService &data) {
 		existing->applyEdition(data);
 	}, [&](const auto &data) {
-		existing->applyEdition(HistoryMessageEdition(_session, data));
+		auto edition = HistoryMessageEdition(_session, data);
+		// BearGram: keep the previous text for the edit history.
+		BearGram::RecordEdit(existing, edition.textWithEntities.text);
+		existing->applyEdition(std::move(edition));
 	});
 }
 
@@ -3350,6 +3354,10 @@ void Session::processMessagesDeleted(
 			affected->unknownMessageDeleted(messageId.v);
 		}
 	}
+	// BearGram: the deleted messages logger keeps items of tracked chats.
+	toDestroy.erase(ranges::remove_if(toDestroy, [](not_null<HistoryItem*> item) {
+		return BearGram::KeepDeleted(item);
+	}), end(toDestroy));
 	if (!toDestroy.empty()) {
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {
@@ -3373,6 +3381,10 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 			historiesToCheck.emplace(history);
 		}
 	}
+	// BearGram: the deleted messages logger keeps items of tracked chats.
+	toDestroy.erase(ranges::remove_if(toDestroy, [](not_null<HistoryItem*> item) {
+		return BearGram::KeepDeleted(item);
+	}), end(toDestroy));
 	if (!toDestroy.empty()) {
 		notifyItemsAboutToBeDestroyed(toDestroy);
 		for (const auto &item : toDestroy) {

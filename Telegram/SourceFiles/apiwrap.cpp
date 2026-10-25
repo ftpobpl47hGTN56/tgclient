@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "apiwrap.h"
 
+#include "beargram/beargram_deleted_log.h"
 #include "api/api_authorizations.h"
 #include "api/api_attached_stickers.h"
 #include "api/api_blocked_peers.h"
@@ -2190,10 +2191,12 @@ void ApiWrap::updatePrivacyLastSeens() {
 }
 
 void ApiWrap::clearHistory(not_null<PeerData*> peer, bool revoke) {
+	BearGram::ForgetPeer(peer); // BearGram: forget what the logger kept.
 	deleteHistory(peer, true, revoke);
 }
 
 void ApiWrap::deleteConversation(not_null<PeerData*> peer, bool revoke) {
+	BearGram::ForgetPeer(peer); // BearGram: forget what the logger kept.
 	if (const auto chat = peer->asChat()) {
 		request(MTPmessages_DeleteChatUser(
 			MTP_flags(0),

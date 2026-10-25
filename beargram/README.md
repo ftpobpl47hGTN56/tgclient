@@ -34,6 +34,16 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   for one message, "Удалить выбранные у себя" for a selection, "Удалить у себя
   всё от ..." for a sender in groups and channels' comments.
 
+- Optional hiding of Telegram sponsored messages (`SponsoredMessages::canHaveFor`).
+- Account limit 1..15 as a slider (`Settings::maxAccounts`, `Domain::maxAccounts`).
+- "Читать полностью" for long messages (`beargram_read_full`).
+- Local names of users (`beargram_nicknames`, `UserData::setName`,
+  `PeerData::shortName`), menu item "Локальное имя" in chat and profile menus.
+- Deleted messages logger (`beargram_deleted_log`): server deletions in tracked
+  chats keep the items with an "удалено" mark (`Data::Session::processMessagesDeleted`,
+  `BottomInfo`) until restart; edits keep the previous text in
+  `tdata/beargram_log.json` ("История правок"). Modes and a clear button in
+  the BearGram box, a per-chat switch in the chat menu.
 - Search field in Settings > Privacy > Blocked users (loads the whole list).
 - "Report" for users in private chats: in the profile / chat menu and on
   single messages (`Filler::addReport`, `HistoryItem::suggestReport`).

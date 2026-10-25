@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_bottom_info.h"
 
+#include "beargram/beargram_deleted_log.h"
 #include "ui/chat/message_bubble.h"
 #include "ui/chat/chat_style.h"
 #include "ui/effects/reaction_fly_animation.h"
@@ -515,13 +516,16 @@ void BottomInfo::layoutDateText() {
 	const auto name = _authorElided
 		? st::msgDateFont->elided(author, maxWidth - afterAuthorWidth)
 		: author;
-	const auto full = (_data.flags & Data::Flag::Sponsored)
+	auto full = (_data.flags & Data::Flag::Sponsored)
 		? QString()
 		: (_data.flags & Data::Flag::Imported)
 		? (date + ' ' + tr::lng_imported(tr::now))
 		: name.isEmpty()
 		? date
 		: (name + afterAuthor);
+	if (_data.flags & Data::Flag::BearGramDeleted) {
+		full = u"удалено, "_q + full;
+	}
 	auto helper = Ui::Text::CustomEmojiHelper(
 		Core::TextContext({ .session = &_reactionsOwner->session() }));
 	auto marked = TextWithEntities();
@@ -665,6 +669,9 @@ BottomInfo::Data BottomInfoDataFromMessage(not_null<Message*> message) {
 	auto result = BottomInfo::Data();
 	result.date = message->dateTime();
 	result.effectId = item->effectId();
+	if (BearGram::IsKeptDeleted(item)) {
+		result.flags |= Flag::BearGramDeleted;
+	}
 	if (message->hasOutLayout()) {
 		result.flags |= Flag::OutLayout;
 	}
