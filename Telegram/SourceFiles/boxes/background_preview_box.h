@@ -36,6 +36,10 @@ class FadeWrap;
 struct BackgroundPreviewArgs {
 	PeerData *forPeer = nullptr;
 	FullMsgId fromMessageId;
+
+	// BearGram: when set, the box applies nothing to the server and
+	// returns the chosen blur and dimming (0..100) to this callback.
+	Fn<void(bool blurred, int dimming)> localApply;
 };
 
 class BackgroundPreviewBox
@@ -107,6 +111,7 @@ private:
 	PeerData * const _forPeer = nullptr;
 	bool _forPeerLevelCheck = false;
 	FullMsgId _fromMessageId;
+	Fn<void(bool blurred, int dimming)> _localApply;
 	std::unique_ptr<Ui::ChatStyle> _chatStyle;
 	const not_null<History*> _serviceHistory;
 	AdminLog::OwnedItem _service;

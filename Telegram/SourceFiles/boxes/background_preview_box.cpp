@@ -191,6 +191,7 @@ BackgroundPreviewBox::BackgroundPreviewBox(
 , _controller(controller)
 , _forPeer(args.forPeer)
 , _fromMessageId(args.fromMessageId)
+, _localApply(std::move(args.localApply))
 , _chatStyle(std::make_unique<Ui::ChatStyle>(
 	controller->session().colorIndicesValue()))
 , _serviceHistory(_controller->session().data().history(
@@ -488,13 +489,16 @@ void BackgroundPreviewBox::resetTitle() {
 
 void BackgroundPreviewBox::rebuildButtons(bool dark) {
 	clearButtons();
-	addButton(forGroup()
+	auto applyText = _localApply
+		? rpl::producer<QString>(rpl::single(u"Применить у себя"_q))
+		: forGroup()
 		? tr::lng_background_apply_group()
 		: forChannel()
 		? tr::lng_background_apply_channel()
 		: _forPeer
 		? tr::lng_background_apply_button()
-		: tr::lng_settings_apply(), [=] { apply(); });
+		: tr::lng_settings_apply();
+	addButton(std::move(applyText), [=] { apply(); });
 	addButton(tr::lng_cancel(), [=] { closeBox(); });
 	if (!_forPeer && _paper.hasShareUrl()) {
 		addLeftButton(tr::lng_background_share(), [=] { share(); });
@@ -576,6 +580,14 @@ void BackgroundPreviewBox::recreateBlurCheckbox() {
 }
 
 void BackgroundPreviewBox::apply() {
+	if (_localApply) {
+		const auto blurred = _blur ? _blur->checked() : _paper.isBlurred();
+		const auto dimming = _dimmed ? _dimmingIntensity : 0;
+		const auto callback = _localApply;
+		closeBox();
+		callback(blurred, dimming);
+		return;
+	}
 	if (_forPeer) {
 		applyForPeer();
 	} else {
@@ -1076,7 +1088,9 @@ void BackgroundPreviewBox::updateServiceBg(const std::vector<QColor> &bg) {
 	_service = GenerateServiceItem(
 		delegate(),
 		_serviceHistory,
-		(forGroup()
+		(_localApply
+			? u"Эти обои увидите только Вы, на сервер ничего не отправляется."_q
+			: forGroup()
 			? tr::lng_background_other_group(tr::now)
 			: forChannel()
 			? tr::lng_background_other_channel(tr::now)

@@ -1164,6 +1164,9 @@ void Filler::addBearGramWallpaper() {
 		BearGram::ChooseLocalWallpaper(controller, peer);
 	}, &st::menuIconChangeColors);
 	if (BearGram::HasLocalWallpaper(peer)) {
+		_addAction(u"Настроить мои обои"_q, [=] {
+			BearGram::ConfigureLocalWallpaper(controller, peer);
+		}, &st::menuIconSettings);
 		_addAction(u"Сбросить мои обои"_q, [=] {
 			BearGram::ResetLocalWallpaper(peer);
 		}, &st::menuIconRestore);

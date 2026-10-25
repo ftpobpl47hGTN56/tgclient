@@ -21,10 +21,15 @@ namespace BearGram {
 // Local chat wallpapers: a picture for any chat (groups and channels too)
 // that only this app shows. Nothing is sent to the server. Pictures are
 // copied to tdata/beargram_wallpapers, the list is in
-// tdata/beargram_wallpapers.json by "<self>:<peer>".
+// tdata/beargram_wallpapers.json by "<self>:<peer>" together with the
+// blur and dimming chosen in the preview.
 
 [[nodiscard]] bool HasLocalWallpaper(not_null<PeerData*> peer);
 void ChooseLocalWallpaper(
+	not_null<Window::SessionController*> controller,
+	not_null<PeerData*> peer);
+// Opens the preview with blur and dimming for the current local wallpaper.
+void ConfigureLocalWallpaper(
 	not_null<Window::SessionController*> controller,
 	not_null<PeerData*> peer);
 void ResetLocalWallpaper(not_null<PeerData*> peer);
