@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_cloud_themes.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
+#include "mainwindow.h" // MainWindow is a QWidget, needed for the dialog parent.
 #include "settings.h"
 #include "ui/chat/chat_theme.h"
 #include "window/themes/window_theme.h"
