@@ -32,6 +32,23 @@ struct CollapsedText {
 	int fullHeight,
 	int toggleHeight);
 
+// Rich messages (headings, lists) are laid out by the article engine and
+// have no text lines: they are cut by height instead.
+struct CollapsedRich {
+	bool collapsible = false;
+	bool expanded = false;
+	int visibleHeight = 0;
+	int toggleTop = 0;
+	int toggleHeight = 0;
+	int totalHeight = 0;
+};
+
+[[nodiscard]] CollapsedRich ComputeCollapsedRich(
+	not_null<const HistoryItem*> item,
+	int fullHeight,
+	int lineHeight,
+	int toggleHeight);
+
 [[nodiscard]] QString ToggleText(bool expanded);
 [[nodiscard]] ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item);
 

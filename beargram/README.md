@@ -22,6 +22,9 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
 
 - Long messages: text longer than N lines (10-50, default 20) is collapsed to
   a short preview with a "Развернуть" link and can be collapsed back.
+- Rich messages (headings, lists; laid out by the article engine in
+  `HistoryMessageRichPage`) are cut by height with the same thresholds, a
+  fade and the same toggle (`ComputeCollapsedRich`, `Message::collapsedRich`).
 - Filters: messages from blocked users in groups and channel posts marked as
   ads (`erid`, `#реклама`, "Реклама ... ИНН", a closing "Реклама" line) are
   hidden. Own messages never are.

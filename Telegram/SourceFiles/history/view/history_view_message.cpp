@@ -3039,6 +3039,20 @@ BearGram::CollapsedText Message::collapsedText(int textWidth) const {
 		st::msgFont->height);
 }
 
+BearGram::CollapsedRich Message::collapsedRich(int textWidth) const {
+	if (!AllowsCollapse(context())
+		|| !hasVisibleText()
+		|| !hasRichPage()
+		|| textWidth <= 0) {
+		return {};
+	}
+	return BearGram::ComputeCollapsedRich(
+		data(),
+		textHeightFor(textWidth),
+		st::msgFont->height,
+		st::msgFont->height);
+}
+
 void Message::paintText(
 		Painter &p,
 		QRect &trect,
@@ -3059,7 +3073,51 @@ void Message::paintText(
 		trect.setY(trect.y() + botTop->height);
 	}
 	if (const auto rich = const_cast<Message*>(this)->richpage()) {
-	    paintRichText(p, rich, richPageRect(trect), context);
+		// BearGram: long rich messages are cut by height with a toggle.
+		const auto collapse = collapsedRich(trect.width());
+		const auto cut = collapse.collapsible && !collapse.expanded;
+		const auto richRect = richPageRect(trect);
+		if (cut) {
+			p.save();
+			p.setClipRect(
+				QRect(
+					richRect.x(),
+					trect.y(),
+					richRect.width(),
+					collapse.visibleHeight),
+				Qt::IntersectClip);
+		}
+		paintRichText(p, rich, richRect, context);
+		if (cut) {
+			p.restore();
+			if (!usesBubblePattern(context)) {
+				const auto fade = std::min(
+					collapse.visibleHeight,
+					st::msgFont->height * 2);
+				const auto bottom = trect.y() + collapse.visibleHeight;
+				auto transparent = stm->msgBg->c;
+				transparent.setAlpha(0);
+				auto gradient = QLinearGradient(
+					0,
+					bottom - fade,
+					0,
+					bottom);
+				gradient.setColorAt(0., transparent);
+				gradient.setColorAt(1., stm->msgBg->c);
+				p.fillRect(
+					QRect(richRect.x(), bottom - fade, richRect.width(), fade),
+					gradient);
+			}
+		}
+		if (collapse.collapsible) {
+			p.setFont(st::msgFont);
+			p.setPen(stm->textPalette.linkFg);
+			p.drawTextLeft(
+				trect.x(),
+				trect.y() + collapse.toggleTop,
+				width(),
+				BearGram::ToggleText(collapse.expanded));
+		}
 		return;
 	}
 
@@ -4678,6 +4736,25 @@ bool Message::getStateText(
 	}
 	const auto item = this->textItem();
 	if (const auto rich = richpage()) {
+		// BearGram: toggle of a collapsed rich message, nothing below the cut.
+		if (const auto collapse = collapsedRich(trect.width())
+			; collapse.collapsible) {
+			const auto top = trect.y() + collapse.toggleTop;
+			const auto toggleWidth = st::msgFont->width(
+				BearGram::ToggleText(collapse.expanded));
+			if (base::in_range(point.y(), top, top + collapse.toggleHeight)
+				&& base::in_range(
+					point.x(),
+					trect.x(),
+					trect.x() + toggleWidth)) {
+				*outResult = TextState(item);
+				outResult->link = BearGram::ToggleLink(data());
+				return true;
+			} else if (!collapse.expanded
+				&& point.y() >= trect.y() + collapse.visibleHeight) {
+				return false;
+			}
+		}
 		const auto local = prepareRichPageStateRect(point, trect);
 		if (!base::in_range(point.y(), trect.y(), trect.y() + trect.height())) {
 			return false;
@@ -6899,6 +6976,10 @@ int Message::resizeContentGetHeight(int newWidth) {
 			}
 		}
 		if (const auto collapse = collapsedText(textWidth)
+			; collapse.collapsible && !appearing) {
+			newHeight += collapse.totalHeight - textHeightFor(textWidth);
+		}
+		if (const auto collapse = collapsedRich(textWidth)
 			; collapse.collapsible && !appearing) {
 			newHeight += collapse.totalHeight - textHeightFor(textWidth);
 		}

@@ -106,6 +106,38 @@ CollapsedText ComputeCollapsedText(
 	return result;
 }
 
+CollapsedRich ComputeCollapsedRich(
+		not_null<const HistoryItem*> item,
+		int fullHeight,
+		int lineHeight,
+		int toggleHeight) {
+	const auto &settings = Current();
+	if (!settings.collapseLongMessages
+		|| fullHeight <= 0
+		|| lineHeight <= 0) {
+		return {};
+	}
+	const auto threshold = settings.collapseAfterLines;
+	if (fullHeight <= threshold * lineHeight) {
+		return {};
+	}
+	const auto preview = std::clamp(
+		settings.collapsedPreviewLines,
+		1,
+		threshold);
+	auto result = CollapsedRich{
+		.collapsible = true,
+		.expanded = Expanded().contains(item->fullId()),
+		.toggleHeight = toggleHeight,
+	};
+	result.visibleHeight = result.expanded
+		? fullHeight
+		: std::min(fullHeight, preview * lineHeight);
+	result.toggleTop = result.visibleHeight;
+	result.totalHeight = result.toggleTop + result.toggleHeight;
+	return result;
+}
+
 QString ToggleText(bool expanded) {
 	return expanded
 		? u"▴ Свернуть"_q

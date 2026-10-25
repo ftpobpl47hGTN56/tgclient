@@ -31,6 +31,7 @@ struct TornEdgeCache;
 
 namespace BearGram {
 struct CollapsedText;
+struct CollapsedRich;
 } // namespace BearGram
 
 namespace HistoryView {
@@ -409,6 +410,8 @@ private:
 		const PaintContext &context) const;
 	[[nodiscard]] bool isHidden() const override;
 	[[nodiscard]] BearGram::CollapsedText collapsedText(
+		int textWidth) const;
+	[[nodiscard]] BearGram::CollapsedRich collapsedRich(
 		int textWidth) const;
 	void paintText(
 		Painter &p,
