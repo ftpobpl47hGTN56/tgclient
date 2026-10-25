@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "beargram/beargram_deleted_log.h"
 #include "beargram/beargram_nicknames.h"
+#include "beargram/beargram_wallpapers.h"
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
 #include "menu/menu_mark_as_read.h"
@@ -336,6 +337,7 @@ private:
 	void addReport();
 	void addBearGramNickname();
 	void addBearGramLogToggle();
+	void addBearGramWallpaper();
 	void addNewContact();
 	void addShareContact();
 	void addEditContact();
@@ -1150,6 +1152,22 @@ void Filler::addBearGramLogToggle() {
 			? u"Удалённые сообщения этого чата будут сохраняться"_q
 			: u"Удалённые сообщения этого чата не сохраняются"_q);
 	}, &st::menuIconArchive);
+}
+
+void Filler::addBearGramWallpaper() {
+	if (_topic) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto controller = _controller;
+	_addAction(u"Мои обои для чата"_q, [=] {
+		BearGram::ChooseLocalWallpaper(controller, peer);
+	}, &st::menuIconChangeColors);
+	if (BearGram::HasLocalWallpaper(peer)) {
+		_addAction(u"Сбросить мои обои"_q, [=] {
+			BearGram::ResetLocalWallpaper(peer);
+		}, &st::menuIconRestore);
+	}
 }
 
 void Filler::addNewContact() {
@@ -1993,6 +2011,7 @@ void Filler::fillHistoryActions() {
 	addTranslate();
 	addBearGramNickname();
 	addBearGramLogToggle();
+	addBearGramWallpaper();
 	addReport();
 	addClearHistory();
 	addDeleteChat();

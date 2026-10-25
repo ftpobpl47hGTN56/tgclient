@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/section_widget.h"
 
+#include "beargram/beargram_wallpapers.h"
 #include "mainwidget.h"
 #include "mainwindow.h"
 #include "ui/ui_utility.h"
@@ -575,7 +576,7 @@ auto ChatThemeValueFromPeer(
 	}) | rpl::flatten_latest(
 	) | rpl::distinct_until_changed();
 
-	return rpl::combine(
+	auto server = rpl::combine(
 		std::move(cloud),
 		controller->peerThemeOverrideValue()
 	) | rpl::map([=](
@@ -585,6 +586,15 @@ auto ChatThemeValueFromPeer(
 			&& peer->themeToken() != overriden.token)
 			? std::move(overriden.theme)
 			: std::move(cloud);
+	});
+	// BearGram: a local wallpaper of this chat wins over the server one.
+	return rpl::combine(
+		std::move(server),
+		BearGram::LocalWallpaperThemeValue(peer, nullptr)
+	) | rpl::map([](
+			std::shared_ptr<Ui::ChatTheme> &&server,
+			std::shared_ptr<Ui::ChatTheme> &&local) {
+		return local ? std::move(local) : std::move(server);
 	});
 }
 

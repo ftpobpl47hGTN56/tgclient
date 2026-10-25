@@ -246,6 +246,8 @@ PRIVATE
     beargram/beargram_nicknames.h
     beargram/beargram_read_full.cpp
     beargram/beargram_read_full.h
+    beargram/beargram_wallpapers.cpp
+    beargram/beargram_wallpapers.h
     beargram/beargram_local_hide.h
     beargram/beargram_long_messages.cpp
     beargram/beargram_long_messages.h

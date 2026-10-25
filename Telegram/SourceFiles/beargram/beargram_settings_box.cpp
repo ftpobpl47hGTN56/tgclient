@@ -133,7 +133,7 @@ void AddIntSlider(
 } // namespace
 
 void SettingsBox(not_null<Ui::GenericBox*> box) {
-	box->setTitle(rpl::single(u"BearGram (сборка 12)"_q));
+	box->setTitle(rpl::single(u"BearGram (сборка 13)"_q));
 	box->setWidth(st::boxWideWidth);
 
 	const auto container = box->verticalLayout();

@@ -44,6 +44,10 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   `BottomInfo`) until restart; edits keep the previous text in
   `tdata/beargram_log.json` ("История правок"). Modes and a clear button in
   the BearGram box, a per-chat switch in the chat menu.
+- Local chat wallpapers (`beargram_wallpapers`): chat menu > "Мои обои для чата"
+  for any chat, groups and channels too; the picture is copied to
+  `tdata/beargram_wallpapers` and its chat theme replaces the server one in
+  `Window::ChatThemeValueFromPeer`. Nothing is sent to the server.
 - Search field in Settings > Privacy > Blocked users (loads the whole list).
 - "Report" for users in private chats: in the profile / chat menu and on
   single messages (`Filler::addReport`, `HistoryItem::suggestReport`).
