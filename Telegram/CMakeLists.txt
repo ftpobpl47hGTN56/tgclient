@@ -240,6 +240,8 @@ PRIVATE
     beargram/beargram_filters.cpp
     beargram/beargram_filters.h
     beargram/beargram_local_hide.cpp
+    beargram/beargram_nicknames.cpp
+    beargram/beargram_nicknames.h
     beargram/beargram_read_full.cpp
     beargram/beargram_read_full.h
     beargram/beargram_local_hide.h

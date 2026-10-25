@@ -2009,7 +2009,10 @@ void InitFieldAutocomplete(
 			&& data.method == FieldAutocomplete::ChooseMethod::ByClick;
 		if (data.mention.isEmpty() || ctrlClick) {
 			field->insertTag(
-				user->firstName.isEmpty() ? user->name() : user->firstName,
+				// BearGram: mentions keep the real name, not the local one.
+				user->firstName.isEmpty()
+					? (user->lastName.isEmpty() ? user->name() : user->lastName)
+					: user->firstName,
 				PrepareMentionTag(user));
 		} else {
 			field->insertTag('@' + data.mention);

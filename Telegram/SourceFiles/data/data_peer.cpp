@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_peer.h"
 
+#include "beargram/beargram_nicknames.h"
 #include "api/api_sensitive_content.h"
 #include "data/data_user.h"
 #include "data/data_chat.h"
@@ -1341,6 +1342,9 @@ const QString &PeerData::name() const {
 
 const QString &PeerData::shortName() const {
 	if (const auto user = asUser()) {
+		if (!BearGram::Nickname(peerToUser(id)).isEmpty()) {
+			return _name; // BearGram: the local name.
+		}
 		return user->firstName.isEmpty() ? user->lastName : user->firstName;
 	} else if (const auto to = migrateTo()) {
 		return to->shortName();

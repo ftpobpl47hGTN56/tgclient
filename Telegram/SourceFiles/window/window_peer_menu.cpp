@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
 
+#include "beargram/beargram_nicknames.h"
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
 #include "menu/menu_mark_as_read.h"
@@ -332,6 +333,7 @@ private:
 	void addExportChat();
 	void addTranslate();
 	void addReport();
+	void addBearGramNickname();
 	void addNewContact();
 	void addShareContact();
 	void addEditContact();
@@ -1121,6 +1123,17 @@ void Filler::addReport() {
 	_addAction(tr::lng_profile_report(tr::now), [=] {
 		ShowReportMessageBox(navigation->uiShow(), peer, {}, {});
 	}, &st::menuIconReport);
+}
+
+void Filler::addBearGramNickname() {
+	const auto user = _peer->asUser();
+	if (!user || user->isSelf() || _topic) {
+		return;
+	}
+	const auto controller = _controller;
+	_addAction(u"Локальное имя"_q, [=] {
+		BearGram::ShowNicknameBox(controller->uiShow(), user);
+	}, &st::menuIconEdit);
 }
 
 void Filler::addNewContact() {
@@ -1962,6 +1975,7 @@ void Filler::fillHistoryActions() {
 	addDirectMessages();
 	addExportChat();
 	addTranslate();
+	addBearGramNickname();
 	addReport();
 	addClearHistory();
 	addDeleteChat();
@@ -1992,6 +2006,7 @@ void Filler::fillProfileActions() {
 	addToggleFolder();
 	addBlockUser();
 	addBanFromChannel();
+	addBearGramNickname();
 	addReport();
 	addLeaveChat();
 	addDeleteContact();

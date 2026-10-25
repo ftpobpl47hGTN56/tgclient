@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_user.h"
 
+#include "beargram/beargram_nicknames.h"
 #include "api/api_credits.h"
 #include "api/api_global_privacy.h"
 #include "api/api_sensitive_content.h"
@@ -424,7 +425,12 @@ void UserData::setName(
 			lastName = newLastName;
 		}
 	}
-	const auto newFullName = langFullName(firstName, lastName);
+	// BearGram: a local name replaces the displayed name only, the real
+	// first and last names stay in firstName / lastName.
+	const auto local = BearGram::Nickname(peerToUser(id));
+	const auto newFullName = local.isEmpty()
+		? langFullName(firstName, lastName)
+		: local;
 	updateNameDelayed(newFullName, newPhoneName, newUsername);
 }
 
