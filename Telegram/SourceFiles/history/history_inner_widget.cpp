@@ -66,6 +66,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
 #include "beargram/beargram_local_hide.h"
+#include "beargram/beargram_read_full.h"
 #include "window/window_controller.h"
 #include "window/window_peer_menu.h"
 #include "window/notifications_manager.h"
@@ -3503,6 +3504,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				if (!item->isUploading()) {
 					BearGram::AddLocalHideActions(_menu.get(), item);
 				}
+				BearGram::AddReadFullAction(
+					_menu.get(),
+					item,
+					_controller->uiShow());
 				if (!blockSender && item->suggestReport()) {
 					_menu->addAction(tr::lng_context_report_msg(tr::now), [=] {
 						reportItem(itemId);
@@ -3817,6 +3822,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				if (!item->isUploading()) {
 					BearGram::AddLocalHideActions(_menu.get(), item);
 				}
+				BearGram::AddReadFullAction(
+					_menu.get(),
+					item,
+					_controller->uiShow());
 				if (!canBlockSender && canReport) {
 					_menu->addAction(tr::lng_context_report_msg(tr::now), [=] {
 						reportAsGroup(itemId);
