@@ -1,0 +1,56 @@
+name: BearGram sync with Telegram Desktop
+
+# Once a day checks for a new stable Telegram Desktop release (vX.Y.Z),
+# merges it into the beargram branch and starts the Windows build.
+# When the merge needs manual conflict resolution, the run fails and GitHub
+# sends an e-mail about it; nothing is pushed then.
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 10:17 in Novosibirsk
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: beargram-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_PAT: ${{ secrets.BEARGRAM_PAT != '' }}
+    steps:
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          ref: beargram
+          fetch-depth: 0
+          filter: blob:none
+          # Upstream commits touch .github/workflows, and pushing them needs
+          # a token with the "workflows" permission. GITHUB_TOKEN doesn't
+          # have it, so a personal token is used when it is set.
+          token: ${{ secrets.BEARGRAM_PAT || github.token }}
+
+      - name: Merge the newest release.
+        id: merge
+        run: |
+          git config user.name "BearGram sync"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bash beargram/sync_upstream.sh
+
+      - name: Push.
+        if: steps.merge.outputs.updated != ''
+        run: git push origin HEAD:beargram
+
+      # A push made with the personal token starts the build by itself,
+      # a push made with GITHUB_TOKEN doesn't.
+      - name: Start the Windows build.
+        if: steps.merge.outputs.updated != '' && env.HAS_PAT != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run beargram-windows.yml --ref beargram

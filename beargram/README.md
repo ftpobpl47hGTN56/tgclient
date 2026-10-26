@@ -41,7 +41,9 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   `PeerData::shortName`), menu item "Локальное имя" in chat and profile menus.
 - Deleted messages logger (`beargram_deleted_log`): server deletions in tracked
   chats keep the items with an "удалено" mark (`Data::Session::processMessagesDeleted`,
-  `BottomInfo`) until restart; edits keep the previous text in
+  `BottomInfo`). A full copy of each kept message is saved in
+  `tdata/beargram_deleted.json` and put back into the history slices from the
+  server after a restart (`History::addOlderSlice` / `addNewerSlice`); edits keep the previous text in
   `tdata/beargram_log.json` ("История правок"). Modes and a clear button in
   the BearGram box, a per-chat switch in the chat menu.
 - Local chat wallpapers (`beargram_wallpapers`): chat menu > "Мои обои для чата"
@@ -66,3 +68,18 @@ would download the official Telegram Desktop and replace BearGram with it.
 
 Then open `out\Telegram.slnx` in Visual Studio 2026 and build the `Telegram`
 project. The result is `out\Debug\BearGram.exe` (or `out\Release\BearGram.exe`).
+
+## Updates from Telegram Desktop and cloud builds
+
+- `.github/workflows/beargram-sync.yml` runs daily: when a new stable Telegram
+  Desktop release (`vX.Y.Z`) is out, `beargram/sync_upstream.sh` merges it into
+  `beargram`. Conflicts in `core/version.h` and `winrc/Telegram.rc` are solved
+  by taking the upstream file and running `beargram/branding.py`; upstream
+  workflows are removed again. Any other conflict fails the run and nothing is
+  pushed. Needs the secret `BEARGRAM_PAT` (a token with Contents and Workflows
+  write access), because upstream commits change `.github/workflows`.
+- `.github/workflows/beargram-windows.yml` builds `BearGram.exe` (Release, x64)
+  on every push to `beargram` and publishes it in Releases as
+  `BearGram-<version>-x64.zip`. Own API keys go to the secrets
+  `TDESKTOP_API_ID` and `TDESKTOP_API_HASH`.
+- The same merge by hand: `bash beargram/sync_upstream.sh` (Git Bash).
