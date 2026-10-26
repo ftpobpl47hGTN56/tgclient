@@ -3060,6 +3060,8 @@ void Session::updateEditedMessage(const MTPMessage &data) {
 		Reactions::CheckUnknownForUnread(this, data);
 		return;
 	}
+	// BearGram: keep the latest version for the deleted messages logger.
+	BearGram::RememberRaw(existing->history()->peer, data);
 	if (existing->isLocalUpdateMedia() && data.type() == mtpc_message) {
 		updateExistingMessage(data.c_message());
 	}

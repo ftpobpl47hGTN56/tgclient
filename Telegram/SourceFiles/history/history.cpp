@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history.h"
 
+#include "beargram/beargram_deleted_log.h"
+
 #include "history/view/history_view_element.h"
 #include "history/view/history_view_item_preview.h"
 #include "history/view/history_view_translate_tracker.h"
@@ -615,6 +617,8 @@ not_null<HistoryItem*> History::createItem(
 		bool detachExistingItem,
 		bool newMessage) {
 	owner().fillMessagePeers(peer->id, message);
+	// BearGram: remember the raw message for the deleted messages logger.
+	BearGram::RememberRaw(peer, message);
 	if (const auto result = owner().message(peer, id)) {
 		if (detachExistingItem) {
 			result->removeMainView(Data::ViewRemovalReason::Detached);
@@ -1898,7 +1902,11 @@ void History::addEdgesToSharedMedia() {
 	}
 }
 
-void History::addOlderSlice(const QVector<MTPMessage> &slice) {
+void History::addOlderSlice(const QVector<MTPMessage> &original) {
+	// BearGram: put back the deleted messages kept by the logger.
+	auto slice = original;
+	BearGram::InjectDeleted(this, slice, true);
+
 	if (slice.isEmpty()) {
 		_loadedAtTop = true;
 		checkLocalMessages();
@@ -1907,6 +1915,10 @@ void History::addOlderSlice(const QVector<MTPMessage> &slice) {
 
 	if (const auto added = createItems(slice); !added.empty()) {
 		addCreatedOlderSlice(added);
+		if (original.isEmpty()) {
+			// Only restored messages were added, the top is reached.
+			_loadedAtTop = true;
+		}
 	} else {
 		// If no items were added it means we've loaded everything old.
 		_loadedAtTop = true;
@@ -1937,10 +1949,14 @@ void History::addCreatedOlderSlice(
 	addToSharedMedia(items);
 }
 
-void History::addNewerSlice(const QVector<MTPMessage> &slice) {
+void History::addNewerSlice(const QVector<MTPMessage> &original) {
 	bool wasLoadedAtBottom = loadedAtBottom();
 
-	if (slice.isEmpty()) {
+	// BearGram: put back the deleted messages kept by the logger.
+	auto slice = original;
+	BearGram::InjectDeleted(this, slice, false);
+
+	if (original.isEmpty()) {
 		_loadedAtBottom = true;
 		if (!lastMessage()) {
 			setLastMessage(lastAvailableMessage());
