@@ -47,12 +47,61 @@ jobs:
         shell: cmd
 
     steps:
-      - name: Prepare directories.
+      # A build of all libraries from scratch needs more space than the
+      # runner has free: the first run failed with "not enough space on the
+      # disk". Tools BearGram doesn't need are removed, and the build folder
+      # goes to the drive with more free space.
+      - name: Free disk space.
+        shell: pwsh
         run: |
-          mkdir %userprofile%\TBuild\Libraries
-          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
-          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
-          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}, @{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}}
+          $paths = @(
+            'C:\Android',
+            'C:\ghcup',
+            'C:\Strawberry',
+            'C:\Miniconda',
+            'C:\mingw64',
+            'C:\msys64',
+            'C:\rtools45',
+            'C:\rtools44',
+            'C:\tools\php',
+            'C:\selenium',
+            'C:\SeleniumWebDrivers',
+            'C:\Program Files\Microsoft SQL Server',
+            'C:\Program Files\MongoDB',
+            'C:\Program Files\PostgreSQL',
+            'C:\Program Files\MySQL',
+            'C:\Program Files\Google\Chrome',
+            'C:\Program Files\Mozilla Firefox',
+            'C:\Program Files (x86)\Android',
+            'C:\Program Files\dotnet\sdk\6.0*',
+            'C:\Program Files\dotnet\sdk\7.0*',
+            'C:\hostedtoolcache\windows\CodeQL',
+            'C:\hostedtoolcache\windows\go',
+            'C:\hostedtoolcache\windows\Java_*',
+            'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\node'
+          )
+          foreach ($path in $paths) {
+            Get-Item -Path $path -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "Removing $($_.FullName)"
+              cmd /c "rmdir /s /q `"$($_.FullName)`"" 2>$null
+            }
+          }
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Prepare directories.
+        shell: pwsh
+        run: |
+          $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -in @('C', 'D') -and $_.Free }
+          $best = $drives | Sort-Object Free -Descending | Select-Object -First 1
+          $root = if ($best.Name -eq 'C') { "$env:USERPROFILE\TBuild" } else { "$($best.Name):\TBuild" }
+          Write-Host "Building on drive $($best.Name): ($([math]::Round($best.Free/1GB,1)) GB free) in $root"
+          New-Item -ItemType Directory -Force -Path "$root\Libraries" | Out-Null
+          cmd /c mklink /d "$env:GITHUB_WORKSPACE\TBuild" "$root"
+          "TBUILD=$env:GITHUB_WORKSPACE\TBuild" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "LibrariesPath=$env:GITHUB_WORKSPACE\TBuild\Libraries\win64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Get repository name.
         shell: bash
