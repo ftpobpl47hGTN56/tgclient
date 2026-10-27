@@ -152,8 +152,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
+          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-release-v1-${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.OS }}-${{ runner.arch }}-third-party-release-v1-
+            ${{ runner.OS }}-${{ runner.arch }}-third-party-
 
       - name: Libraries cache.
         id: cache-libs
@@ -165,10 +167,10 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-libs-v3-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-libs-release-v1-${{ env.CACHE_KEY }}
           restore-keys: |
+            ${{ runner.OS }}-x64-libs-release-v1-
             ${{ runner.OS }}-x64-libs-v3-
-            ${{ runner.OS }}-x64-libs-v2-
 
       - name: Qt cache.
         id: cache-qt
@@ -177,8 +179,10 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-qt-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-x64-qt-
+          key: ${{ runner.OS }}-x64-qt-release-v1-${{ env.CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.OS }}-x64-qt-release-v1-
+            ${{ runner.OS }}-x64-qt-
 
       # The prune below used to delete the generated sources of tdesktop_rust
       # (out/src/wallet_engine/*.cpp) while its stage key stayed in the cache,
@@ -197,9 +201,11 @@ jobs:
             echo "tdesktop_rust cache is fine."
           fi
 
+      # Without skip-release: upstream CI builds Telegram in Debug and builds
+      # only Debug libraries, BearGram is built in Release and needs both.
       - name: Libraries.
         run: |
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent
+          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent
 
       - name: Free up some disk space.
         shell: bash
@@ -210,7 +216,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ env.TBUILD }}\ThirdParty
-          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-${{ runner.arch }}-third-party-release-v1-${{ env.CACHE_KEY }}
 
       - name: Save Libraries cache.
         if: steps.cache-libs.outputs.cache-hit != 'true'
@@ -222,7 +228,7 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-libs-v3-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-libs-release-v1-${{ env.CACHE_KEY }}
 
       - name: Save Qt cache.
         if: steps.cache-qt.outputs.cache-hit != 'true'
@@ -231,7 +237,7 @@ jobs:
           path: |
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-x64-qt-${{ env.CACHE_KEY }}
+          key: ${{ runner.OS }}-x64-qt-release-v1-${{ env.CACHE_KEY }}
 
       - name: Disk space before the build.
         shell: pwsh
