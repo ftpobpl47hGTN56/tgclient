@@ -6,6 +6,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "beargram/beargram_local_hide.h"
 
+#include "beargram/beargram_post_filter.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history.h"
@@ -68,6 +69,8 @@ void AddLocalHideActions(
 			session->data().requestItemResize(found);
 		}
 	}, &st::menuIconDelete);
+
+	PostFilter::AddSenderActions(menu, item);
 
 	const auto history = item->history();
 	const auto from = item->from();

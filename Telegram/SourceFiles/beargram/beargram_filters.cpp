@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_blocked_peers.h"
 #include "apiwrap.h"
 #include "beargram/beargram_local_hide.h"
+#include "beargram/beargram_post_filter.h"
 #include "beargram/beargram_settings.h"
 #include "data/data_channel.h"
 #include "data/data_peer.h"
@@ -146,6 +147,8 @@ bool IsFilteredOut(
 		return true;
 	} else if (item->out() || !item->isRegular()) {
 		return false;
+	} else if (PostFilter::IsFilteredOut(item, textItem)) {
+		return true;
 	}
 	const auto &settings = Current();
 	if (settings.hideBlockedUsers

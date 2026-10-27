@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_top_bar_widget.h"
 
+#include "beargram/beargram_post_filter.h"
+
 #include "history/history.h"
 #include "history/view/history_view_send_action.h"
 #include "boxes/add_contact_box.h"
@@ -127,6 +129,7 @@ TopBarWidget::TopBarWidget(
 , _call(this, st::topBarCall)
 , _groupCall(this, st::topBarGroupCall)
 , _search(this, st::topBarSearch)
+, _bearFilter(this, st::topBarBearFilter)
 , _infoToggle(this, st::topBarInfo)
 , _menuToggle(this, st::topBarMenuToggle)
 , _titlePeerText(st::windowMinWidth / 3)
@@ -158,6 +161,18 @@ TopBarWidget::TopBarWidget(
 		}
 	});
 	_groupCall->setClickedCallback([=] { groupCall(); });
+	_bearFilter->setClickedCallback([=] {
+		_controller->show(Box(
+			BearGram::PostFilter::FilterBox,
+			&_controller->session()));
+	});
+	BearGram::PostFilter::EnabledValue(
+	) | rpl::on_next([=](bool enabled) {
+		// Highlighted while the filter is on, so it is clear why
+		// some posts are missing.
+		const auto icon = enabled ? &st::topBarBearFilterActive : nullptr;
+		_bearFilter->setIconOverride(icon, icon);
+	}, lifetime());
 	_menuToggle->addClickHandler([=](auto) { showPeerMenu(); });
 	_menuToggle->setAcceptBoth(true, true);
 	_infoToggle->setClickedCallback([=] { toggleInfoSection(); });
@@ -262,6 +277,7 @@ TopBarWidget::TopBarWidget(
 	_call->setAccessibleName(tr::lng_profile_action_short_call(tr::now));
 	_groupCall->setAccessibleName(tr::lng_group_call_title(tr::now));
 	_search->setAccessibleName(tr::lng_shortcuts_search(tr::now));
+	_bearFilter->setAccessibleName(u"Фильтр постов"_q);
 	_infoToggle->setAccessibleName(tr::lng_settings_section_info(tr::now));
 	_menuToggle->setAccessibleName(tr::lng_chat_menu(tr::now));
 	_back->setAccessibleName(tr::lng_go_back(tr::now));
@@ -1119,6 +1135,11 @@ void TopBarWidget::updateSearchVisibility() {
 		|| (_activeChat.section == Section::SavedSublist
 			&& _activeChat.key.sublist());
 	_search->setVisible(searchAllowedMode && !_chooseForReportReason);
+	const auto filterPeer = _activeChat.key.peer();
+	_bearFilter->setVisible(searchAllowedMode
+		&& !_chooseForReportReason
+		&& filterPeer
+		&& !filterPeer->isUser());
 }
 
 void TopBarWidget::updateInfoButtonVisibility() {
@@ -1302,6 +1323,10 @@ void TopBarWidget::updateControlsGeometry() {
 	_search->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_search->isHidden()) {
 		_rightTaken += _search->width() + st::topBarCallSkip;
+	}
+	_bearFilter->moveToRight(_rightTaken, otherButtonsTop);
+	if (!_bearFilter->isHidden()) {
+		_rightTaken += _bearFilter->width() + st::topBarCallSkip;
 	}
 
 	updateMembersShowArea();

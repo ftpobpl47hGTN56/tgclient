@@ -941,6 +941,13 @@ topBarSearch: IconButton {
 	rippleAreaSize: 40px;
 	ripple: defaultRippleAnimationBgOver;
 }
+// BearGram: post filter button, left of the search.
+topBarBearFilter: IconButton(topBarSearch) {
+	icon: icon {{ "menu/tag_filter", menuIconFg }};
+	iconOver: icon {{ "menu/tag_filter", menuIconFgOver }};
+	iconPosition: point(8px, 15px);
+}
+topBarBearFilterActive: icon {{ "menu/tag_filter", windowActiveTextFg }};
 topBarCloseChoose: IconButton(topBarSearch) {
 	width: 56px;
 	icon: icon {{ "info/info_close", boxTitleCloseFg }};
