@@ -290,9 +290,9 @@ jobs:
             {
               echo "### $title"
               echo '```'
-              grep -n -E "error [A-Z]+[0-9]+|fatal error|CMake Error|FAILED|Error:|error:" "$file" | head -40
+              grep -n -E "error [A-Z]+[0-9]+|fatal error|CMake Error|FAILED|Error:|error:" "$file" | head -40 || true
               echo '...'
-              tail -n 60 "$file"
+              tail -n 60 "$file" | cut -c1-400
               echo '```'
             } > report.txt
             cat report.txt >> "$GITHUB_STEP_SUMMARY"
@@ -301,6 +301,9 @@ jobs:
             text="$(sed -e 's/%/%25/g' -e 's/\r//g' report.txt | awk 'BEGIN{ORS="%0A"} {print}')"
             echo "::error title=$title::${text:0:60000}"
           }
+          # The step shell runs with -e and pipefail: grep without matches
+          # or head closing the pipe must not stop the report.
+          set +e +o pipefail
           report "configure.bat" "$GITHUB_WORKSPACE/build.log"
           report "cmake --build" "$GITHUB_WORKSPACE/compile.log"
 
