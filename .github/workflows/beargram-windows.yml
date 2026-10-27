@@ -139,6 +139,43 @@ jobs:
           sdk: ${{ env.SDK }}
           toolset: '14.44'
 
+      # Breakpad (its Release tools, which upstream CI skips) includes
+      # atlbase.h, and the runner has no ATL for the 14.44 toolset. Install
+      # it, and when that is not possible use any ATL that Visual Studio has.
+      - name: ATL for the 14.44 toolset.
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          $tools = Join-Path $vs 'VC\Tools\MSVC'
+          $toolset = Get-ChildItem $tools -Directory | Where-Object Name -like '14.44*' | Select-Object -First 1
+          Write-Host "Visual Studio: $vs, toolset: $($toolset.FullName)"
+          $atl = Join-Path $toolset.FullName 'atlmfc'
+          if (-not (Test-Path (Join-Path $atl 'include\atlbase.h'))) {
+            Write-Host 'No ATL for 14.44, installing it.'
+            $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+            $process = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList @(
+              'modify', '--installPath', "`"$vs`"",
+              '--add', 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL',
+              '--quiet', '--norestart', '--nocache')
+            Write-Host "vs_installer exit code: $($process.ExitCode)"
+          }
+          if (-not (Test-Path (Join-Path $atl 'include\atlbase.h'))) {
+            $found = Get-ChildItem $tools -Directory | Sort-Object Name -Descending |
+              Where-Object { Test-Path (Join-Path $_.FullName 'atlmfc\include\atlbase.h') } |
+              Select-Object -First 1
+            if (-not $found) {
+              Write-Host '::error::No ATL headers found in Visual Studio.'
+              exit 1
+            }
+            $atl = Join-Path $found.FullName 'atlmfc'
+            Write-Host "Using ATL from $atl"
+          } else {
+            Write-Host "ATL is in $atl"
+          }
+          "INCLUDE=$env:INCLUDE;$atl\include" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "LIB=$env:LIB;$atl\lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
       - name: NuGet sources.
         run: |
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
