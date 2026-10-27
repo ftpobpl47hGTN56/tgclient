@@ -234,6 +234,9 @@ jobs:
           echo "::add-mask::$API_HASH"
           echo "TDESKTOP_BUILD_API=-D TDESKTOP_API_ID=$API_ID -D TDESKTOP_API_HASH=$API_HASH" >> $GITHUB_ENV
 
+      # The output also goes to build.log: when the step fails, the next step
+      # puts the end of the log and the error lines into the run annotations,
+      # which can be read without downloading the full log.
       - name: BearGram build.
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
@@ -242,9 +245,45 @@ jobs:
           %TDESKTOP_BUILD_API% ^
           -D CMAKE_CONFIGURATION_TYPES=Release ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
-          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
+          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON > %GITHUB_WORKSPACE%\build.log 2>&1
+          set CONFIGURE_RESULT=%errorlevel%
+          type %GITHUB_WORKSPACE%\build.log
+          if not "%CONFIGURE_RESULT%"=="0" (
+            echo configure.bat failed with %CONFIGURE_RESULT%
+            exit /b 1
+          )
 
-          cmake --build ..\out --config Release --parallel --target Telegram
+          cmake --build ..\out --config Release --parallel --target Telegram > %GITHUB_WORKSPACE%\compile.log 2>&1
+          set BUILD_RESULT=%errorlevel%
+          type %GITHUB_WORKSPACE%\compile.log
+          if not "%BUILD_RESULT%"=="0" (
+            echo cmake --build failed with %BUILD_RESULT%
+            exit /b 1
+          )
+
+      - name: Report the build error.
+        if: failure()
+        shell: bash
+        run: |
+          report() {
+            local title="$1" file="$2"
+            [ -f "$file" ] || return 0
+            {
+              echo "### $title"
+              echo '```'
+              grep -n -E "error [A-Z]+[0-9]+|fatal error|CMake Error|FAILED|Error:|error:" "$file" | head -40
+              echo '...'
+              tail -n 60 "$file"
+              echo '```'
+            } > report.txt
+            cat report.txt >> "$GITHUB_STEP_SUMMARY"
+            # Annotations keep newlines encoded as %0A.
+            local text
+            text="$(sed -e 's/%/%25/g' -e 's/\r//g' report.txt | awk 'BEGIN{ORS="%0A"} {print}')"
+            echo "::error title=$title::${text:0:60000}"
+          }
+          report "configure.bat" "$GITHUB_WORKSPACE/build.log"
+          report "cmake --build" "$GITHUB_WORKSPACE/compile.log"
 
       - name: Disk space after a failure.
         if: failure()
