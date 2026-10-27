@@ -170,7 +170,6 @@ jobs:
           key: ${{ runner.OS }}-x64-libs-release-v1-${{ env.CACHE_KEY }}
           restore-keys: |
             ${{ runner.OS }}-x64-libs-release-v1-
-            ${{ runner.OS }}-x64-libs-v3-
 
       - name: Qt cache.
         id: cache-qt
@@ -182,7 +181,6 @@ jobs:
           key: ${{ runner.OS }}-x64-qt-release-v1-${{ env.CACHE_KEY }}
           restore-keys: |
             ${{ runner.OS }}-x64-qt-release-v1-
-            ${{ runner.OS }}-x64-qt-
 
       # The prune below used to delete the generated sources of tdesktop_rust
       # (out/src/wallet_engine/*.cpp) while its stage key stayed in the cache,
@@ -205,7 +203,13 @@ jobs:
       # only Debug libraries, BearGram is built in Release and needs both.
       - name: Libraries.
         run: |
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent
+          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat silent > %GITHUB_WORKSPACE%\libraries.log 2>&1
+          set LIBRARIES_RESULT=%errorlevel%
+          powershell -Command "Get-Content '%GITHUB_WORKSPACE%\libraries.log' -Tail 300"
+          if not "%LIBRARIES_RESULT%"=="0" (
+            echo win.bat failed with %LIBRARIES_RESULT%
+            exit /b 1
+          )
 
       - name: Free up some disk space.
         shell: bash
@@ -310,6 +314,7 @@ jobs:
           # The step shell runs with -e and pipefail: grep without matches
           # or head closing the pipe must not stop the report.
           set +e +o pipefail
+          report "win.bat (libraries)" "$GITHUB_WORKSPACE/libraries.log"
           report "configure.bat" "$GITHUB_WORKSPACE/build.log"
           report "cmake --build" "$GITHUB_WORKSPACE/compile.log"
 
