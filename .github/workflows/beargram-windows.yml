@@ -300,6 +300,18 @@ jobs:
           echo "::add-mask::$API_HASH"
           echo "TDESKTOP_BUILD_API=-D TDESKTOP_API_ID=$API_ID -D TDESKTOP_API_HASH=$API_HASH" >> $GITHUB_ENV
 
+      # The 10th run lost the runner in the middle of compiling BearGram:
+      # msbuild ran several projects at once, each with /MP on every core,
+      # and the 16 GB of memory ran out. Give Windows a large page file and
+      # compile one project at a time with three compiler processes.
+      - name: Page file.
+        continue-on-error: true
+        uses: al-cheb/configure-pagefile-action@v1.4
+        with:
+          minimum-size: 16GB
+          maximum-size: 32GB
+          disk-root: "D:"
+
       # The output also goes to build.log: when the step fails, the next step
       # puts the end of the log and the error lines into the run annotations,
       # which can be read without downloading the full log.
@@ -319,7 +331,7 @@ jobs:
             exit /b 1
           )
 
-          cmake --build ..\out --config Release --parallel --target Telegram > %GITHUB_WORKSPACE%\compile.log 2>&1
+          cmake --build ..\out --config Release --target Telegram -- /m:1 /p:CL_MPCount=3 > %GITHUB_WORKSPACE%\compile.log 2>&1
           set BUILD_RESULT=%errorlevel%
           type %GITHUB_WORKSPACE%\compile.log
           if not "%BUILD_RESULT%"=="0" (
