@@ -115,6 +115,15 @@ if (NOT DESKTOP_APP_DISABLE_SWIFT6)
     telegram_add_apple_swift_runtime(Telegram)
 endif()
 
+# BearGram: the cloud build number for the update check. Set on one file
+# only, so a new number doesn't rebuild everything.
+if (BEARGRAM_BUILD_NUMBER)
+    set_source_files_properties(${src_loc}/beargram/beargram_updates.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS BEARGRAM_BUILD_NUMBER=${BEARGRAM_BUILD_NUMBER}
+    )
+endif()
+
 target_precompile_headers(Telegram PRIVATE $<$<COMPILE_LANGUAGE:CXX,OBJCXX>:${src_loc}/stdafx.h>)
 nice_target_sources(Telegram ${src_loc}
 PRIVATE
@@ -258,6 +267,8 @@ PRIVATE
     beargram/beargram_settings.h
     beargram/beargram_settings_box.cpp
     beargram/beargram_settings_box.h
+    beargram/beargram_updates.cpp
+    beargram/beargram_updates.h
     boxes/filters/edit_filter_box.cpp
     boxes/filters/edit_filter_box.h
     boxes/filters/edit_filter_chats_list.cpp

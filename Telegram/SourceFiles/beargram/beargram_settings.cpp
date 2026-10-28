@@ -61,6 +61,8 @@ constexpr auto kMaxLines = 200;
 		object.value(u"logGroupsMode"_q).toInt(result.logGroupsMode),
 		0,
 		2);
+	result.checkUpdates = object.value(
+		u"checkUpdates"_q).toBool(result.checkUpdates);
 	return result;
 }
 
@@ -78,6 +80,7 @@ void Save(const Settings &settings) {
 	object.insert(u"maxAccounts"_q, settings.maxAccounts);
 	object.insert(u"logPrivateMode"_q, settings.logPrivateMode);
 	object.insert(u"logGroupsMode"_q, settings.logGroupsMode);
+	object.insert(u"checkUpdates"_q, settings.checkUpdates);
 	auto file = QFile(SettingsPath());
 	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
 		file.write(QJsonDocument(object).toJson(QJsonDocument::Indented));

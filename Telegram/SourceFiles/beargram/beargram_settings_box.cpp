@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "beargram/beargram_settings.h"
 #include "beargram/beargram_deleted_log.h"
+#include "beargram/beargram_updates.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/show.h"
 #include "lang/lang_keys.h"
@@ -249,8 +250,8 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 	Ui::AddDividerText(
 		container,
 		rpl::single(u"Удалённые сообщения остаются в чате с пометкой «удалено» "
-			"до перезапуска BearGram (на ПК Telegram не хранит переписку на "
-			"диске). История правок хранится постоянно: «История правок» в "
+			"и после перезапуска BearGram: их копии хранятся в "
+			"tdata/beargram_deleted.json. История правок: «История правок» в "
 			"меню сообщения. В меню ⋮ чата есть «Сохранять удалённые» — он "
 			"добавляет чат в список или убирает из него."_q));
 
@@ -294,6 +295,38 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 		container,
 		rpl::single(u"Изменения применятся к чатам после их повторного "
 			"открытия. Свои сообщения никогда не скрываются."_q));
+
+	Ui::AddSkip(container);
+	Ui::AddSubsectionTitle(container, rpl::single(u"Обновления"_q));
+	AddToggle(
+		container,
+		u"Проверять обновления автоматически"_q,
+		current.checkUpdates,
+		[](bool enabled) {
+			Update([&](Settings &settings) {
+				settings.checkUpdates = enabled;
+			});
+		});
+	const auto check = container->add(object_ptr<Ui::SettingsButton>(
+		container,
+		rpl::single(u"Проверить сейчас"_q),
+		st::settingsButtonNoIcon));
+	const auto weak = base::make_weak(box);
+	check->setClickedCallback([=] {
+		CheckUpdatesNow([=](QString result) {
+			if (const auto strong = weak.get()) {
+				strong->uiShow()->showToast(result);
+			}
+		});
+	});
+	Ui::AddSkip(container);
+	Ui::AddDividerText(
+		container,
+		rpl::single(u"Установлена BearGram "_q
+			+ CurrentVersionText()
+			+ u". Новые сборки появляются на GitHub в Releases; когда "
+				"выходит новая, внизу списка чатов появляется плашка, по "
+				"нажатию открывается страница сборки."_q));
 
 	box->addButton(tr::lng_box_ok(), [=] { box->closeBox(); });
 }

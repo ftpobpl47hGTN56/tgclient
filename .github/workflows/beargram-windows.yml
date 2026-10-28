@@ -323,7 +323,8 @@ jobs:
           %TDESKTOP_BUILD_API% ^
           -D CMAKE_CONFIGURATION_TYPES=Release ^
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
-          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON > %GITHUB_WORKSPACE%\build.log 2>&1
+          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON ^
+          -D BEARGRAM_BUILD_NUMBER=%GITHUB_RUN_NUMBER% > %GITHUB_WORKSPACE%\build.log 2>&1
           set CONFIGURE_RESULT=%errorlevel%
           type %GITHUB_WORKSPACE%\build.log
           if not "%CONFIGURE_RESULT%"=="0" (

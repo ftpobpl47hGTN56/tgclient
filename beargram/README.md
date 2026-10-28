@@ -71,6 +71,14 @@ project. The result is `out\Debug\BearGram.exe` (or `out\Release\BearGram.exe`).
 
 ## Updates from Telegram Desktop and cloud builds
 
+- Update check in the client (`beargram/beargram_updates`): shortly after the
+  start and then every 6 hours BearGram reads the latest GitHub release
+  (`beargram-<version>-build<N>`) and shows "Обновить BearGram (...)" at the
+  bottom of the chats list; a click opens the release page. Cloud builds get
+  their number as `BEARGRAM_BUILD_NUMBER`, so a newer build of the same
+  version is reported too; a local build only reports a newer version.
+  Settings > BearGram > Обновления: automatic checks on/off, "Проверить сейчас".
+
 - `.github/workflows/beargram-sync.yml` runs daily: when a new stable Telegram
   Desktop release (`vX.Y.Z`) is out, `beargram/sync_upstream.sh` merges it into
   `beargram`. Conflicts in `core/version.h` and `winrc/Telegram.rc` are solved

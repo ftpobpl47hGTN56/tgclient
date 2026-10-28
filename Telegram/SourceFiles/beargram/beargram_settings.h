@@ -20,6 +20,8 @@ struct Settings {
 	// Deleted messages logger, see BearGram::LogMode.
 	int logPrivateMode = 1;
 	int logGroupsMode = 1;
+	// Periodic check of GitHub Releases, see beargram_updates.h.
+	bool checkUpdates = true;
 };
 
 inline constexpr auto kMaxAccountsLimit = 15;

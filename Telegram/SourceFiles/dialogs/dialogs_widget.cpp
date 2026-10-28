@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_widget.h"
 
+#include "beargram/beargram_updates.h"
+#include "ui/basic_click_handlers.h"
+
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "base/options.h"
@@ -660,6 +663,13 @@ Widget::Widget(
 			checker.ready()
 		) | rpl::on_next([=] {
 			checkUpdateStatus();
+		}, lifetime());
+	} else {
+		// BearGram: the Telegram updater is off, show BearGram releases.
+		BearGram::StartUpdateChecks();
+		BearGram::AvailableUpdateValue(
+		) | rpl::on_next([=](const BearGram::AvailableUpdate *update) {
+			showBearGramUpdate(update);
 		}, lifetime());
 	}
 
@@ -2659,6 +2669,42 @@ void Widget::checkUpdateStatus() {
 		}
 		_updateTelegram.destroy();
 	}
+	updateControlsGeometry();
+}
+
+void Widget::showBearGramUpdate(const BearGram::AvailableUpdate *update) {
+	Expects(Core::UpdaterDisabled());
+
+	if (_layout == Layout::Child) {
+		return;
+	}
+	if (!update) {
+		if (_updateTelegram) {
+			_updateTelegram.destroy();
+			updateControlsGeometry();
+		}
+		return;
+	}
+	const auto text = u"Обновить BearGram (%1)"_q.arg(update->title);
+	if (_updateTelegram) {
+		_updateTelegram->setText(text);
+	} else {
+		_updateTelegram.create(
+			this,
+			text,
+			st::dialogsUpdateButton,
+			st::dialogsInstallUpdate,
+			st::dialogsInstallUpdateOver,
+			true);
+		_updateTelegram->show();
+		if (_connecting) {
+			_connecting->raise();
+		}
+	}
+	const auto url = update->url;
+	_updateTelegram->setClickedCallback([=] {
+		UrlClickHandler::Open(url);
+	});
 	updateControlsGeometry();
 }
 

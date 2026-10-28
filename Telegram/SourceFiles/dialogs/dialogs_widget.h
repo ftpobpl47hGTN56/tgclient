@@ -19,6 +19,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 class ChannelData;
 
+namespace BearGram {
+struct AvailableUpdate;
+} // namespace BearGram
+
 namespace MTP {
 class Error;
 } // namespace MTP
@@ -260,6 +264,7 @@ private:
 	void refreshTopBars();
 	void showSearchInTopBar(anim::type animated);
 	void checkUpdateStatus();
+	void showBearGramUpdate(const BearGram::AvailableUpdate *update);
 	void openBotMainApp(not_null<UserData*> bot);
 	void changeOpenedSubsection(
 		FnMut<void()> change,
