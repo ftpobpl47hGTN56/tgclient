@@ -948,6 +948,20 @@ topBarBearFilter: IconButton(topBarSearch) {
 	iconPosition: point(8px, 15px);
 }
 topBarBearFilterActive: icon {{ "menu/tag_filter", windowActiveTextFg }};
+bearFilterRowEdit: IconButton {
+	width: 36px;
+	height: 36px;
+	icon: icon {{ "menu/edit", boxTitleCloseFg }};
+	iconOver: icon {{ "menu/edit", boxTitleCloseFgOver }};
+	iconPosition: point(-1px, -1px);
+	rippleAreaPosition: point(2px, 2px);
+	rippleAreaSize: 32px;
+	ripple: defaultRippleAnimationBgOver;
+}
+bearFilterRowRemove: IconButton(bearFilterRowEdit) {
+	icon: icon {{ "menu/delete", boxTitleCloseFg }};
+	iconOver: icon {{ "menu/delete", attentionButtonFg }};
+}
 topBarCloseChoose: IconButton(topBarSearch) {
 	width: 56px;
 	icon: icon {{ "info/info_close", boxTitleCloseFg }};

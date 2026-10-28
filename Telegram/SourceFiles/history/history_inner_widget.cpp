@@ -66,6 +66,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
 #include "beargram/beargram_local_hide.h"
+#include "beargram/beargram_post_filter.h"
 #include "beargram/beargram_read_full.h"
 #include "beargram/beargram_deleted_log.h"
 #include "window/window_controller.h"
@@ -3408,6 +3409,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					[=] { copySelectedText(); },
 					&st::menuIconCopy);
 			}
+			if (isUponSelected == 1) {
+				BearGram::PostFilter::AddSelectedTextAction(
+					_menu.get(),
+					selectedText.rich.text);
+			}
 			if (item && !Ui::SkipTranslate(selectedText.rich)) {
 				const auto peer = item->history()->peer;
 				_menu->addAction(tr::lng_context_translate_selected({}), [=] {
@@ -3585,6 +3591,11 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						: tr::lng_context_copy_selected(tr::now)),
 					[=] { copySelectedText(); },
 					&st::menuIconCopy);
+			}
+			if (isUponSelected == 1) {
+				BearGram::PostFilter::AddSelectedTextAction(
+					_menu.get(),
+					selectedText.rich.text);
 			}
 			if (item && !Ui::SkipTranslate(selectedText.rich)) {
 				const auto peer = item->history()->peer;

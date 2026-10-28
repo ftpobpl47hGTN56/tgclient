@@ -8,12 +8,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "core/application.h"
+#include "core/file_utilities.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "settings/settings_common.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/empty_userpic.h"
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
@@ -27,10 +30,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_basic.h"
 #include "styles/style_boxes.h"
+#include "styles/style_info.h"
 #include "styles/style_layers.h"
+#include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "styles/style_widgets.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
 
 namespace BearGram::PostFilter {
@@ -117,7 +124,160 @@ void RefreshNames(not_null<Main::Session*> session) {
 				|| check(DisplayId(rule.peer))));
 }
 
+[[nodiscard]] QString ExtractUsername(const QString &text) {
+	static const auto link = QRegularExpression(
+		u"^(?:https?://)?(?:www\\.)?(?:t\\.me|telegram\\.me)/"
+		"(?:s/)?@?([A-Za-z0-9_]{4,32})/?$"_q,
+		QRegularExpression::CaseInsensitiveOption);
+	static const auto mention = QRegularExpression(
+		u"^@([A-Za-z0-9_]{4,32})$"_q);
+	if (const auto m = link.match(text); m.hasMatch()) {
+		return m.captured(1);
+	} else if (const auto m = mention.match(text); m.hasMatch()) {
+		return m.captured(1);
+	}
+	return QString();
+}
+
+[[nodiscard]] Rule PeerRule(not_null<PeerData*> peer) {
+	return Rule{
+		.type = RuleType::Peer,
+		.peer = peer->id,
+		.text = peer->name(),
+		.username = peer->username(),
+	};
+}
+
+// "@username" asks the API for the id, then calls done with the chat.
+void ResolveUsername(
+		not_null<Ui::GenericBox*> box,
+		not_null<Main::Session*> session,
+		const QString &username,
+		Fn<void(not_null<PeerData*>)> done) {
+	if (const auto known = session->data().peerByUsername(username)) {
+		done(known);
+		return;
+	}
+	const auto weak = base::make_weak(box);
+	session->api().request(MTPcontacts_ResolveUsername(
+		MTP_flags(0),
+		MTP_string(username),
+		MTPstring()
+	)).done([=](const MTPcontacts_ResolvedPeer &result) {
+		const auto &data = result.data();
+		session->data().processUsers(data.vusers());
+		session->data().processChats(data.vchats());
+		if (const auto peer = session->data().peerLoaded(
+				peerFromMTP(data.vpeer()))) {
+			done(peer);
+		}
+	}).fail([=] {
+		if (const auto strong = weak.get()) {
+			strong->showToast(u"Не найдено: @"_q + username);
+		}
+	}).send();
+}
+
+// Turns what was typed into a rule: @username or a t.me link, an id, or a
+// word. Calls done right away, or after the API answers for a username.
+void ParseInput(
+		not_null<Ui::GenericBox*> box,
+		not_null<Main::Session*> session,
+		const QString &text,
+		bool wholeWord,
+		Fn<void(Rule)> done) {
+	if (const auto username = ExtractUsername(text); !username.isEmpty()) {
+		ResolveUsername(box, session, username, [=](not_null<PeerData*> peer) {
+			done(PeerRule(peer));
+		});
+	} else if (const auto id = ParseId(text)) {
+		const auto peer = FindPeer(session, id);
+		done(peer ? PeerRule(peer) : Rule{ .type = RuleType::Peer, .peer = id });
+	} else {
+		done(Rule{
+			.type = RuleType::Word,
+			.text = text,
+			.wholeWord = wholeWord,
+		});
+	}
+}
+
+[[nodiscard]] bool SameRuleIdentity(const Rule &a, const Rule &b) {
+	return (a.type == b.type)
+		&& (a.peer == b.peer)
+		&& (a.text == b.text)
+		&& (a.wholeWord == b.wholeWord);
+}
+
+void EditRuleBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<Main::Session*> session,
+		Rule original) {
+	box->setTitle(rpl::single(u"Изменить правило"_q));
+	box->setWidth(st::boxWideWidth);
+
+	const auto isPeer = (original.type == RuleType::Peer);
+	const auto value = !isPeer
+		? original.text
+		: original.username.isEmpty()
+		? DisplayId(original.peer)
+		: ('@' + original.username);
+
+	box->addRow(
+		object_ptr<Ui::FlatLabel>(
+			box,
+			u"Можно вписать другое слово, @username или ID. "
+			"Вкл/выкл правила сохранится."_q,
+			st::boxLabel),
+		st::boxRowPadding);
+	Ui::AddSkip(box->verticalLayout());
+	const auto field = box->addRow(
+		object_ptr<Ui::InputField>(
+			box,
+			st::defaultInputField,
+			rpl::single(u"@username, ID или слово"_q),
+			value),
+		st::boxRowPadding);
+	const auto whole = box->addRow(
+		object_ptr<Ui::Checkbox>(
+			box,
+			u"Слово целиком"_q,
+			original.wholeWord,
+			st::defaultBoxCheckbox),
+		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
+
+	box->setFocusCallback([=] {
+		field->setFocusFast();
+		field->selectAll();
+	});
+	const auto save = [=] {
+		const auto text = field->getLastText().trimmed();
+		if (text.isEmpty()) {
+			field->showError();
+			return;
+		}
+		const auto weak = base::make_weak(box);
+		ParseInput(box, session, text, whole->checked(), [=](Rule rule) {
+			// Find the rule again: the list may have changed meanwhile.
+			const auto &rules = Rules();
+			for (auto i = 0; i != int(rules.size()); ++i) {
+				if (SameRuleIdentity(rules[i], original)) {
+					ReplaceRule(i, std::move(rule));
+					break;
+				}
+			}
+			if (const auto strong = weak.get()) {
+				strong->closeBox();
+			}
+		});
+	};
+	field->submits() | rpl::on_next(save, field->lifetime());
+	box->addButton(tr::lng_settings_save(), save);
+	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
+}
+
 void AddRuleRow(
+		not_null<Ui::GenericBox*> box,
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Main::Session*> session,
 		int index,
@@ -143,11 +303,20 @@ void AddRuleRow(
 
 	const auto remove = Ui::CreateChild<Ui::IconButton>(
 		row,
-		st::boxTitleClose);
+		st::bearFilterRowRemove);
 	remove->setAccessibleName(u"Удалить правило"_q);
 	remove->setClickedCallback([=] {
 		// The list is rebuilt from RulesChanges(), this row goes away.
 		crl::on_main(remove, [=] { RemoveRule(index); });
+	});
+
+	const auto edit = Ui::CreateChild<Ui::IconButton>(
+		row,
+		st::bearFilterRowEdit);
+	edit->setAccessibleName(u"Изменить правило"_q);
+	const auto copy = rule;
+	edit->setClickedCallback([=] {
+		box->uiShow()->show(Box(EditRuleBox, session, copy));
 	});
 
 	const auto toggle = Ui::CreateChild<Ui::Checkbox>(
@@ -161,13 +330,29 @@ void AddRuleRow(
 		crl::on_main(toggle, [=] { SetRuleEnabled(index, checked); });
 	}, toggle->lifetime());
 
+	// The row is added to an already shown list after a rebuild, and
+	// children created after their parent was shown stay hidden in Qt.
+	remove->show();
+	edit->show();
+	toggle->show();
+
 	row->widthValue() | rpl::on_next([=](int width) {
 		const auto right = st::boxRowPadding.right() / 2;
 		remove->moveToRight(right, (kRowHeight - remove->height()) / 2);
-		toggle->moveToRight(
+		edit->moveToRight(
 			right + remove->width(),
+			(kRowHeight - edit->height()) / 2);
+		toggle->moveToRight(
+			right + remove->width() + edit->width(),
 			(kRowHeight - toggle->height()) / 2);
 	}, row->lifetime());
+
+	// The list keeps its width when it is rebuilt (search, toggles), so
+	// the layout doesn't resize new rows: give them the width right away,
+	// otherwise the buttons are placed for a zero wide row.
+	if (const auto width = list->width()) {
+		row->resizeToWidth(width);
+	}
 
 	row->paintRequest() | rpl::on_next([=] {
 		auto p = Painter(row);
@@ -213,13 +398,6 @@ void AddRuleRow(
 			st::normalFont->elided(subtitle, textWidth));
 	}, row->lifetime());
 
-	// The list is rebuilt while the box keeps its width (search, toggles),
-	// so the layout won't resize the new rows by itself: without this they
-	// stay zero wide and the switch and the cross end up off the row.
-	if (const auto width = list->width()) {
-		row->resizeToWidth(width);
-	}
-
 	if (isPeer) {
 		// Avatars arrive later than the box opens.
 		session->downloaderTaskFinished(
@@ -230,6 +408,7 @@ void AddRuleRow(
 }
 
 void RebuildList(
+		not_null<Ui::GenericBox*> box,
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Ui::FlatLabel*> empty,
 		not_null<Main::Session*> session,
@@ -239,72 +418,97 @@ void RebuildList(
 	auto shown = 0;
 	for (auto i = 0; i != int(rules.size()); ++i) {
 		if (MatchesQuery(rules[i], query)) {
-			AddRuleRow(list, session, i, rules[i]);
+			AddRuleRow(box, list, session, i, rules[i]);
 			++shown;
 		}
 	}
 	empty->setText(rules.empty()
 		? u"Правил пока нет. Добавьте @username, ID или слово выше, "
-			"или нажмите правой кнопкой на сообщение → "
+			"или выделите текст в сообщении и нажмите правой кнопкой → "
 			"«В фильтр постов»."_q
 		: (shown ? QString() : u"Ничего не найдено."_q));
 	empty->setVisible(!shown);
 	list->resizeToWidth(list->width());
 }
 
-[[nodiscard]] QString ExtractUsername(const QString &text) {
-	static const auto link = QRegularExpression(
-		u"^(?:https?://)?(?:www\\.)?(?:t\\.me|telegram\\.me)/"
-		"(?:s/)?@?([A-Za-z0-9_]{4,32})/?$"_q,
-		QRegularExpression::CaseInsensitiveOption);
-	static const auto mention = QRegularExpression(
-		u"^@([A-Za-z0-9_]{4,32})$"_q);
-	if (const auto m = link.match(text); m.hasMatch()) {
-		return m.captured(1);
-	} else if (const auto m = mention.match(text); m.hasMatch()) {
-		return m.captured(1);
-	}
-	return QString();
+void ExportRules(not_null<Ui::GenericBox*> box) {
+	const auto weak = base::make_weak(box);
+	FileDialog::GetWritePath(
+		box.get(),
+		u"Экспорт фильтра постов"_q,
+		u"JSON (*.json);;Текст (*.txt)"_q,
+		QDir::homePath() + u"/beargram_post_filter.json"_q,
+		[=](QString &&path) {
+			const auto text = path.endsWith(u".txt"_q, Qt::CaseInsensitive);
+			auto file = QFile(path);
+			const auto ok = file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+				&& (file.write(text ? ExportText() : ExportJson()) >= 0);
+			if (const auto strong = weak.get()) {
+				strong->showToast(ok
+					? (u"Сохранено: "_q + QDir::toNativeSeparators(path))
+					: u"Не удалось записать файл."_q);
+			}
+		});
 }
 
-void ResolveAndAdd(
+void ImportRules(
 		not_null<Ui::GenericBox*> box,
-		not_null<Main::Session*> session,
-		const QString &username) {
-	const auto added = [=](not_null<PeerData*> peer) {
-		const auto fresh = AddPeer(peer);
-		box->showToast(fresh
-			? (u"Добавлено: "_q + peer->name())
-			: (u"Уже в фильтре: "_q + peer->name()));
-	};
-	if (const auto known = session->data().peerByUsername(username)) {
-		added(known);
+		not_null<Main::Session*> session) {
+	const auto weak = base::make_weak(box);
+	FileDialog::GetOpenPath(
+		box.get(),
+		u"Импорт фильтра постов"_q,
+		u"Правила (*.json *.txt);;Все файлы (*.*)"_q,
+		[=](FileDialog::OpenResult &&result) {
+			auto content = result.remoteContent;
+			if (content.isEmpty() && !result.paths.isEmpty()) {
+				auto file = QFile(result.paths.front());
+				if (file.open(QIODevice::ReadOnly)) {
+					content = file.readAll();
+				}
+			}
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
+			} else if (content.isEmpty()) {
+				strong->showToast(u"Файл пустой или не читается."_q);
+				return;
+			}
+			const auto imported = Import(content);
+			auto text = u"Добавлено правил: %1"_q.arg(imported.added);
+			if (imported.skipped) {
+				text += u", уже были: %1"_q.arg(imported.skipped);
+			}
+			if (!imported.usernames.isEmpty()) {
+				text += u". Ищу @username: %1"_q.arg(
+					imported.usernames.size());
+			}
+			strong->showToast(text);
+			for (const auto &username : imported.usernames) {
+				ResolveUsername(
+					strong,
+					session,
+					username,
+					[](not_null<PeerData*> peer) { AddRule(PeerRule(peer)); });
+			}
+		});
+}
+
+void ClearRulesWithConfirm(not_null<Ui::GenericBox*> box) {
+	if (Rules().empty()) {
+		box->showToast(u"Правил и так нет."_q);
 		return;
 	}
-	const auto weak = base::make_weak(box);
-	session->api().request(MTPcontacts_ResolveUsername(
-		MTP_flags(0),
-		MTP_string(username),
-		MTPstring()
-	)).done([=](const MTPcontacts_ResolvedPeer &result) {
-		const auto &data = result.data();
-		session->data().processUsers(data.vusers());
-		session->data().processChats(data.vchats());
-		const auto peer = session->data().peerLoaded(
-			peerFromMTP(data.vpeer()));
-		if (!peer) {
-			return;
-		}
-		if (weak.get()) {
-			added(peer);
-		} else {
-			AddPeer(peer);
-		}
-	}).fail([=] {
-		if (const auto strong = weak.get()) {
-			strong->showToast(u"Не найдено: @"_q + username);
-		}
-	}).send();
+	box->uiShow()->show(Ui::MakeConfirmBox({
+		.text = u"Удалить все правила фильтра (%1)? "
+			"Перед этим можно сделать экспорт."_q.arg(Rules().size()),
+		.confirmed = [=](Fn<void()> close) {
+			ClearRules();
+			close();
+		},
+		.confirmText = u"Удалить всё"_q,
+		.confirmStyle = &st::attentionBoxButton,
+	}));
 }
 
 } // namespace
@@ -333,11 +537,9 @@ void FilterBox(
 	Ui::AddDividerText(
 		container,
 		rpl::single(u"Работает во всех аккаунтах. Скрывает посты "
-			"в группах, каналах и комментариях. Отправитель ищется "
-			"по ID, поэтому смена ника или имени фильтр не обходит. "
-			"Посты, где пользователь из списка упомянут (@username или "
-			"ссылка на него), тоже скрываются — например, анкеты в "
-			"каналах-репостерах."_q));
+			"в группах, каналах и комментариях: от человека (по ID, "
+			"смена ника не поможет), с упоминанием его @username, "
+			"и со словами из списка."_q));
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(
@@ -353,10 +555,30 @@ void FilterBox(
 	const auto whole = container->add(
 		object_ptr<Ui::Checkbox>(
 			container,
-			u"Слово целиком (не скрывать «котлета» по слову «кот»)"_q,
+			u"Слово целиком (не скрывать «котлета» по «кот»)"_q,
 			false,
 			st::defaultBoxCheckbox),
 		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
+
+	Ui::AddSkip(container);
+	Settings::AddButtonWithIcon(
+		container,
+		rpl::single(u"Импорт из файла (JSON или TXT)"_q),
+		st::settingsButton,
+		{ &st::menuIconImportTheme }
+	)->setClickedCallback([=] { ImportRules(box, session); });
+	Settings::AddButtonWithIcon(
+		container,
+		rpl::single(u"Экспорт в файл"_q),
+		st::settingsButton,
+		{ &st::menuIconExport }
+	)->setClickedCallback([=] { ExportRules(box); });
+	Settings::AddButtonWithIcon(
+		container,
+		rpl::single(u"Очистить все правила"_q),
+		st::settingsAttentionButtonWithIcon,
+		{ &st::menuIconDeleteAttention }
+	)->setClickedCallback([=] { ClearRulesWithConfirm(box); });
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(
@@ -381,7 +603,12 @@ void FilterBox(
 		object_ptr<Ui::VerticalLayout>(container));
 
 	const auto rebuild = [=] {
-		RebuildList(list, empty, session, search->getLastText().trimmed());
+		RebuildList(
+			box,
+			list,
+			empty,
+			session,
+			search->getLastText().trimmed());
 	};
 	rebuild();
 	RulesChanges() | rpl::on_next(rebuild, list->lifetime());
@@ -394,17 +621,16 @@ void FilterBox(
 			return;
 		}
 		input->clear();
-		if (const auto username = ExtractUsername(text); !username.isEmpty()) {
-			ResolveAndAdd(box, session, username);
-		} else if (const auto id = ParseId(text)) {
-			if (const auto peer = FindPeer(session, id)) {
-				AddPeer(peer);
-			} else if (!AddPeerId(id)) {
-				box->showToast(u"Этот ID уже в фильтре."_q);
+		const auto weak = base::make_weak(box);
+		ParseInput(box, session, text, whole->checked(), [=](Rule rule) {
+			const auto title = Title(rule);
+			const auto added = AddRule(std::move(rule));
+			if (const auto strong = weak.get()) {
+				strong->showToast(added
+					? (u"Добавлено: "_q + title)
+					: (u"Уже в фильтре: "_q + title));
 			}
-		} else if (!AddWord(text, whole->checked())) {
-			box->showToast(u"Такое слово уже в фильтре."_q);
-		}
+		});
 	};
 	input->submits() | rpl::on_next(submit, input->lifetime());
 

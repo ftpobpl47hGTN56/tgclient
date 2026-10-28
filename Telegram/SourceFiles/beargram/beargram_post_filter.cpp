@@ -13,11 +13,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/view/history_view_element.h"
-#include "ui/text/text_entity.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "settings.h"
+#include "ui/text/text_entity.h"
 #include "ui/widgets/popup_menu.h"
 #include "styles/style_menu_icons.h"
 
@@ -45,13 +45,9 @@ struct State {
 
 	// Built from the enabled rules by Rebuild().
 	base::flat_set<PeerId> peers;
+	base::flat_set<QString> usernames; // Lowercase, without '@'.
 	QRegularExpression words;
 	bool hasWords = false;
-	// Usernames of user rules: posts that mention @username are hidden too,
-	// as in channels that repost ads with "@username" in the text.
-	base::flat_set<QString> usernames;
-	QRegularExpression mentions;
-	bool hasMentions = false;
 
 	int version = 0;
 	base::flat_map<FullMsgId, Cached> cache;
@@ -76,18 +72,15 @@ void Rebuild(State &state) {
 	state.peers.clear();
 	state.usernames.clear();
 	auto patterns = QStringList();
-	auto mentions = QStringList();
 	for (const auto &rule : state.rules) {
 		if (!rule.enabled) {
 			continue;
 		} else if (rule.type == RuleType::Peer) {
 			state.peers.emplace(rule.peer);
 			// Users only: a channel's own posts often end with its
-			// @username, and the channel feed itself is never hidden.
+			// @username, and a channel feed must not hide itself.
 			if (peerIsUser(rule.peer) && !rule.username.isEmpty()) {
 				state.usernames.emplace(rule.username.toLower());
-				mentions.push_back(
-					QRegularExpression::escape(rule.username));
 			}
 		} else if (!rule.text.isEmpty()) {
 			patterns.push_back(WordPattern(rule));
@@ -103,21 +96,57 @@ void Rebuild(State &state) {
 	if (state.hasWords && !state.words.isValid()) {
 		state.hasWords = false;
 	}
-	// Plain "@username" text without a mention entity is caught here.
-	state.hasMentions = !mentions.isEmpty();
-	state.mentions = state.hasMentions
-		? QRegularExpression(
-			u"(?<![\\w@])@(?:"_q
-				+ mentions.join('|')
-				+ u")(?![\\w])"_q,
-			QRegularExpression::CaseInsensitiveOption
-				| QRegularExpression::UseUnicodePropertiesOption)
-		: QRegularExpression();
-	if (state.hasMentions && !state.mentions.isValid()) {
-		state.hasMentions = false;
-	}
 	++state.version;
 	state.cache.clear();
+}
+
+[[nodiscard]] std::optional<Rule> RuleFromJson(const QJsonObject &entry) {
+	auto rule = Rule();
+	rule.enabled = entry.value(u"on"_q).toBool(true);
+	if (entry.value(u"type"_q).toString() == u"peer"_q) {
+		rule.type = RuleType::Peer;
+		rule.peer = ParseId(entry.value(u"id"_q).toString());
+		rule.text = entry.value(u"name"_q).toString();
+		rule.username = entry.value(u"username"_q).toString();
+		if (!rule.peer) {
+			return std::nullopt;
+		}
+	} else {
+		rule.type = RuleType::Word;
+		rule.text = entry.value(u"text"_q).toString().trimmed();
+		rule.wholeWord = entry.value(u"whole"_q).toBool(false);
+		if (rule.text.isEmpty()) {
+			return std::nullopt;
+		}
+	}
+	return rule;
+}
+
+[[nodiscard]] QJsonObject RuleToJson(const Rule &rule) {
+	auto entry = QJsonObject();
+	if (rule.type == RuleType::Peer) {
+		entry.insert(u"type"_q, u"peer"_q);
+		entry.insert(u"id"_q, DisplayId(rule.peer));
+		entry.insert(u"name"_q, rule.text);
+		entry.insert(u"username"_q, rule.username);
+	} else {
+		entry.insert(u"type"_q, u"word"_q);
+		entry.insert(u"text"_q, rule.text);
+		entry.insert(u"whole"_q, rule.wholeWord);
+	}
+	entry.insert(u"on"_q, rule.enabled);
+	return entry;
+}
+
+[[nodiscard]] QByteArray Serialize(const State &state) {
+	auto rules = QJsonArray();
+	for (const auto &rule : state.rules) {
+		rules.push_back(RuleToJson(rule));
+	}
+	auto object = QJsonObject();
+	object.insert(u"enabled"_q, state.enabled.current());
+	object.insert(u"rules"_q, rules);
+	return QJsonDocument(object).toJson(QJsonDocument::Indented);
 }
 
 void Load(State &state) {
@@ -128,52 +157,16 @@ void Load(State &state) {
 	const auto object = QJsonDocument::fromJson(file.readAll()).object();
 	state.enabled = object.value(u"enabled"_q).toBool(true);
 	for (const auto value : object.value(u"rules"_q).toArray()) {
-		const auto entry = value.toObject();
-		auto rule = Rule();
-		rule.enabled = entry.value(u"on"_q).toBool(true);
-		if (entry.value(u"type"_q).toString() == u"peer"_q) {
-			rule.type = RuleType::Peer;
-			rule.peer = ParseId(entry.value(u"id"_q).toString());
-			rule.text = entry.value(u"name"_q).toString();
-			rule.username = entry.value(u"username"_q).toString();
-			if (!rule.peer) {
-				continue;
-			}
-		} else {
-			rule.type = RuleType::Word;
-			rule.text = entry.value(u"text"_q).toString().trimmed();
-			rule.wholeWord = entry.value(u"whole"_q).toBool(false);
-			if (rule.text.isEmpty()) {
-				continue;
-			}
+		if (auto rule = RuleFromJson(value.toObject())) {
+			state.rules.push_back(std::move(*rule));
 		}
-		state.rules.push_back(std::move(rule));
 	}
 }
 
 void Save(const State &state) {
-	auto rules = QJsonArray();
-	for (const auto &rule : state.rules) {
-		auto entry = QJsonObject();
-		if (rule.type == RuleType::Peer) {
-			entry.insert(u"type"_q, u"peer"_q);
-			entry.insert(u"id"_q, DisplayId(rule.peer));
-			entry.insert(u"name"_q, rule.text);
-			entry.insert(u"username"_q, rule.username);
-		} else {
-			entry.insert(u"type"_q, u"word"_q);
-			entry.insert(u"text"_q, rule.text);
-			entry.insert(u"whole"_q, rule.wholeWord);
-		}
-		entry.insert(u"on"_q, rule.enabled);
-		rules.push_back(entry);
-	}
-	auto object = QJsonObject();
-	object.insert(u"enabled"_q, state.enabled.current());
-	object.insert(u"rules"_q, rules);
 	auto file = QFile(FilePath());
 	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-		file.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
+		file.write(Serialize(state));
 	}
 }
 
@@ -226,35 +219,75 @@ void Changed() {
 	return peer->name();
 }
 
-[[nodiscard]] bool MentionsFiltered(
+[[nodiscard]] bool SameRule(const Rule &a, const Rule &b) {
+	if (a.type != b.type) {
+		return false;
+	} else if (a.type == RuleType::Peer) {
+		return (a.peer == b.peer);
+	}
+	return (a.wholeWord == b.wholeWord)
+		&& (Normalize(a.text) == Normalize(b.text));
+}
+
+[[nodiscard]] int FindRule(const State &state, const Rule &rule) {
+	for (auto i = 0; i != int(state.rules.size()); ++i) {
+		if (SameRule(state.rules[i], rule)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+// Adds without saving and recounting, so a batch costs one Changed().
+bool Insert(State &state, Rule rule) {
+	if (rule.type == RuleType::Word) {
+		rule.text = rule.text.trimmed();
+		if (rule.text.isEmpty()) {
+			return false;
+		}
+	} else if (!rule.peer) {
+		return false;
+	}
+	if (FindRule(state, rule) >= 0) {
+		return false;
+	}
+	state.rules.push_back(std::move(rule));
+	return true;
+}
+
+[[nodiscard]] bool HasMention(
 		const State &state,
 		const TextWithEntities &text) {
-	for (const auto &entity : text.entities) {
-		const auto type = entity.type();
-		if (type == EntityType::MentionName) {
+	if (!state.peers.empty()) {
+		for (const auto &entity : text.entities) {
+			if (entity.type() != EntityType::MentionName) {
+				continue;
+			}
 			const auto fields = TextUtilities::MentionNameDataToFields(
 				entity.data());
 			if (fields.userId
-				&& state.peers.contains(
-					peerFromUser(UserId(fields.userId)))) {
-				return true;
-			}
-		} else if (type == EntityType::Mention) {
-			auto username = text.text.mid(
-				entity.offset(),
-				entity.length()).toLower();
-			if (username.startsWith('@')) {
-				username = username.mid(1);
-			}
-			if (state.usernames.contains(username)) {
+				&& state.peers.contains(peerFromUser(UserId(fields.userId)))) {
 				return true;
 			}
 		}
 	}
-	return state.hasMentions && text.text.contains(state.mentions);
+	if (!state.usernames.empty() && text.text.contains('@')) {
+		static const auto mention = QRegularExpression(
+			u"@([A-Za-z0-9_]{4,32})"_q);
+		auto i = mention.globalMatch(text.text);
+		while (i.hasNext()) {
+			const auto match = i.next();
+			if (state.usernames.contains(match.captured(1).toLower())) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
-// Words of word rules and mentions of filtered users in the text.
+// Words and mentions of filtered people in the text, cached per message.
+// Posts relayed by bots carry the author only as "@username" in the text,
+// so a person rule matches such mentions too.
 [[nodiscard]] bool MatchesText(
 		State &state,
 		not_null<const HistoryItem*> item) {
@@ -275,8 +308,7 @@ void Changed() {
 	}
 	const auto hidden = (state.hasWords
 			&& Normalize(text.text).contains(state.words))
-		|| ((!state.peers.empty() || state.hasMentions)
-			&& MentionsFiltered(state, text));
+		|| HasMention(state, text);
 	state.cache[id] = Cached{
 		.signature = signature,
 		.version = state.version,
@@ -360,38 +392,141 @@ bool AddPeer(not_null<PeerData*> peer) {
 }
 
 bool AddPeerId(PeerId peer) {
-	if (!peer || HasPeer(peer)) {
+	if (!Insert(Instance(), Rule{ .type = RuleType::Peer, .peer = peer })) {
 		return false;
 	}
-	Instance().rules.push_back(Rule{
-		.type = RuleType::Peer,
-		.peer = peer,
-	});
 	Changed();
 	return true;
 }
 
 bool AddWord(const QString &word, bool wholeWord) {
-	const auto text = word.trimmed();
-	if (text.isEmpty()) {
+	const auto rule = Rule{
+		.type = RuleType::Word,
+		.text = word,
+		.wholeWord = wholeWord,
+	};
+	if (!Insert(Instance(), rule)) {
 		return false;
 	}
-	auto &state = Instance();
-	const auto normalized = Normalize(text);
-	for (const auto &rule : state.rules) {
-		if (rule.type == RuleType::Word
-			&& rule.wholeWord == wholeWord
-			&& Normalize(rule.text) == normalized) {
-			return false;
-		}
-	}
-	state.rules.push_back(Rule{
-		.type = RuleType::Word,
-		.text = text,
-		.wholeWord = wholeWord,
-	});
 	Changed();
 	return true;
+}
+
+bool AddRule(Rule rule) {
+	if (!Insert(Instance(), std::move(rule))) {
+		return false;
+	}
+	Changed();
+	return true;
+}
+
+bool ReplaceRule(int index, Rule rule) {
+	auto &state = Instance();
+	if (index < 0 || index >= int(state.rules.size())) {
+		return false;
+	} else if (rule.type == RuleType::Word) {
+		rule.text = rule.text.trimmed();
+		if (rule.text.isEmpty()) {
+			return false;
+		}
+	} else if (!rule.peer) {
+		return false;
+	}
+	rule.enabled = state.rules[index].enabled;
+	const auto existing = FindRule(state, rule);
+	if (existing >= 0 && existing != index) {
+		// Became the same as another rule: keep just that one.
+		state.rules.erase(begin(state.rules) + index);
+	} else {
+		state.rules[index] = std::move(rule);
+	}
+	Changed();
+	return true;
+}
+
+void ClearRules() {
+	auto &state = Instance();
+	if (state.rules.empty()) {
+		return;
+	}
+	state.rules.clear();
+	Changed();
+}
+
+QByteArray ExportJson() {
+	return Serialize(Instance());
+}
+
+QByteArray ExportText() {
+	auto lines = QStringList{
+		u"// BearGram: фильтр постов. Одно правило в строке:"_q,
+		u"// число - ID (1099189294, -100... для каналов), @username,"_q,
+		u"// \"слово\" в кавычках - слово целиком, иначе любое вхождение."_q,
+	};
+	for (const auto &rule : Instance().rules) {
+		if (rule.type == RuleType::Peer) {
+			lines.push_back(DisplayId(rule.peer));
+		} else if (rule.wholeWord) {
+			lines.push_back('"' + rule.text + '"');
+		} else {
+			lines.push_back(rule.text);
+		}
+	}
+	return lines.join('\n').toUtf8() + '\n';
+}
+
+ImportResult Import(const QByteArray &content) {
+	auto result = ImportResult();
+	auto &state = Instance();
+	auto error = QJsonParseError();
+	const auto document = QJsonDocument::fromJson(content, &error);
+	if (error.error == QJsonParseError::NoError && document.isObject()) {
+		const auto rules = document.object().value(u"rules"_q).toArray();
+		for (const auto value : rules) {
+			if (auto rule = RuleFromJson(value.toObject())) {
+				if (Insert(state, std::move(*rule))) {
+					++result.added;
+				} else {
+					++result.skipped;
+				}
+			}
+		}
+	} else {
+		static const auto username = QRegularExpression(
+			u"^@([A-Za-z0-9_]{4,32})$"_q);
+		for (auto line : QString::fromUtf8(content).split('\n')) {
+			line = line.trimmed();
+			if (line.isEmpty() || line.startsWith(u"//"_q)) {
+				continue;
+			} else if (const auto m = username.match(line); m.hasMatch()) {
+				result.usernames.push_back(m.captured(1));
+				continue;
+			}
+			auto rule = Rule();
+			if (const auto id = ParseId(line)) {
+				rule = Rule{ .type = RuleType::Peer, .peer = id };
+			} else if (line.size() > 2
+				&& line.startsWith('"')
+				&& line.endsWith('"')) {
+				rule = Rule{
+					.type = RuleType::Word,
+					.text = line.mid(1, line.size() - 2),
+					.wholeWord = true,
+				};
+			} else {
+				rule = Rule{ .type = RuleType::Word, .text = line };
+			}
+			if (Insert(state, std::move(rule))) {
+				++result.added;
+			} else {
+				++result.skipped;
+			}
+		}
+	}
+	if (result.added) {
+		Changed();
+	}
+	return result;
 }
 
 void UpdatePeerInfo(not_null<PeerData*> peer) {
@@ -517,6 +652,39 @@ void AddSenderActions(
 				u"В фильтр постов: %1 (репост)"_q);
 		}
 	}
+}
+
+void AddSelectedTextAction(
+		not_null<Ui::PopupMenu*> menu,
+		const QString &selected) {
+	constexpr auto kMaxLength = 128;
+	constexpr auto kShownLength = 24;
+	const auto text = selected.simplified();
+	if (text.isEmpty() || text.size() > kMaxLength) {
+		return;
+	}
+	const auto id = ParseId(text);
+	const auto rule = id
+		? Rule{ .type = RuleType::Peer, .peer = id }
+		: Rule{ .type = RuleType::Word, .text = text };
+	if (FindRule(Instance(), rule) >= 0) {
+		return;
+	}
+	const auto shown = (text.size() > kShownLength)
+		? (text.left(kShownLength - 1) + QChar(0x2026))
+		: text;
+	menu->addAction(
+		(id
+			? u"В фильтр постов: ID %1"_q
+			: u"В фильтр постов: «%1»"_q).arg(shown),
+		[=] {
+			if (id) {
+				AddPeerId(id);
+			} else {
+				AddWord(text, false);
+			}
+		},
+		&st::menuIconTagFilter);
 }
 
 } // namespace BearGram::PostFilter
