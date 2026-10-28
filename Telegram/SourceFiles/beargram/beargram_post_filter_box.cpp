@@ -213,6 +213,13 @@ void AddRuleRow(
 			st::normalFont->elided(subtitle, textWidth));
 	}, row->lifetime());
 
+	// The list is rebuilt while the box keeps its width (search, toggles),
+	// so the layout won't resize the new rows by itself: without this they
+	// stay zero wide and the switch and the cross end up off the row.
+	if (const auto width = list->width()) {
+		row->resizeToWidth(width);
+	}
+
 	if (isPeer) {
 		// Avatars arrive later than the box opens.
 		session->downloaderTaskFinished(
@@ -327,7 +334,10 @@ void FilterBox(
 		container,
 		rpl::single(u"Работает во всех аккаунтах. Скрывает посты "
 			"в группах, каналах и комментариях. Отправитель ищется "
-			"по ID, поэтому смена ника или имени фильтр не обходит."_q));
+			"по ID, поэтому смена ника или имени фильтр не обходит. "
+			"Посты, где пользователь из списка упомянут (@username или "
+			"ссылка на него), тоже скрываются — например, анкеты в "
+			"каналах-репостерах."_q));
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(

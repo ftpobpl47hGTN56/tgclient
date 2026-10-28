@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/view/history_view_element.h"
+#include "ui/text/text_entity.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
@@ -46,6 +47,11 @@ struct State {
 	base::flat_set<PeerId> peers;
 	QRegularExpression words;
 	bool hasWords = false;
+	// Usernames of user rules: posts that mention @username are hidden too,
+	// as in channels that repost ads with "@username" in the text.
+	base::flat_set<QString> usernames;
+	QRegularExpression mentions;
+	bool hasMentions = false;
 
 	int version = 0;
 	base::flat_map<FullMsgId, Cached> cache;
@@ -68,12 +74,21 @@ struct State {
 
 void Rebuild(State &state) {
 	state.peers.clear();
+	state.usernames.clear();
 	auto patterns = QStringList();
+	auto mentions = QStringList();
 	for (const auto &rule : state.rules) {
 		if (!rule.enabled) {
 			continue;
 		} else if (rule.type == RuleType::Peer) {
 			state.peers.emplace(rule.peer);
+			// Users only: a channel's own posts often end with its
+			// @username, and the channel feed itself is never hidden.
+			if (peerIsUser(rule.peer) && !rule.username.isEmpty()) {
+				state.usernames.emplace(rule.username.toLower());
+				mentions.push_back(
+					QRegularExpression::escape(rule.username));
+			}
 		} else if (!rule.text.isEmpty()) {
 			patterns.push_back(WordPattern(rule));
 		}
@@ -87,6 +102,19 @@ void Rebuild(State &state) {
 		: QRegularExpression();
 	if (state.hasWords && !state.words.isValid()) {
 		state.hasWords = false;
+	}
+	// Plain "@username" text without a mention entity is caught here.
+	state.hasMentions = !mentions.isEmpty();
+	state.mentions = state.hasMentions
+		? QRegularExpression(
+			u"(?<![\\w@])@(?:"_q
+				+ mentions.join('|')
+				+ u")(?![\\w])"_q,
+			QRegularExpression::CaseInsensitiveOption
+				| QRegularExpression::UseUnicodePropertiesOption)
+		: QRegularExpression();
+	if (state.hasMentions && !state.mentions.isValid()) {
+		state.hasMentions = false;
 	}
 	++state.version;
 	state.cache.clear();
@@ -198,7 +226,36 @@ void Changed() {
 	return peer->name();
 }
 
-[[nodiscard]] bool MatchesWords(
+[[nodiscard]] bool MentionsFiltered(
+		const State &state,
+		const TextWithEntities &text) {
+	for (const auto &entity : text.entities) {
+		const auto type = entity.type();
+		if (type == EntityType::MentionName) {
+			const auto fields = TextUtilities::MentionNameDataToFields(
+				entity.data());
+			if (fields.userId
+				&& state.peers.contains(
+					peerFromUser(UserId(fields.userId)))) {
+				return true;
+			}
+		} else if (type == EntityType::Mention) {
+			auto username = text.text.mid(
+				entity.offset(),
+				entity.length()).toLower();
+			if (username.startsWith('@')) {
+				username = username.mid(1);
+			}
+			if (state.usernames.contains(username)) {
+				return true;
+			}
+		}
+	}
+	return state.hasMentions && text.text.contains(state.mentions);
+}
+
+// Words of word rules and mentions of filtered users in the text.
+[[nodiscard]] bool MatchesText(
 		State &state,
 		not_null<const HistoryItem*> item) {
 	const auto &text = item->originalText();
@@ -216,7 +273,10 @@ void Changed() {
 	if (int(state.cache.size()) >= kMaxCached) {
 		state.cache.clear();
 	}
-	const auto hidden = Normalize(text.text).contains(state.words);
+	const auto hidden = (state.hasWords
+			&& Normalize(text.text).contains(state.words))
+		|| ((!state.peers.empty() || state.hasMentions)
+			&& MentionsFiltered(state, text));
 	state.cache[id] = Cached{
 		.signature = signature,
 		.version = state.version,
@@ -430,15 +490,12 @@ bool IsFilteredOut(
 			}
 		}
 	}
-	if (!state.hasWords) {
-		return false;
-	}
-	if (MatchesWords(state, item)) {
+	if (MatchesText(state, item)) {
 		return true;
 	}
 	return textItem
 		&& (textItem != item.get())
-		&& MatchesWords(state, not_null<const HistoryItem*>(textItem));
+		&& MatchesText(state, not_null<const HistoryItem*>(textItem));
 }
 
 void AddSenderActions(
