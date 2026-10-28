@@ -18,6 +18,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 
+#ifdef Q_OS_WIN
+// Static Qt6Network uses the Windows DNS API (QDnsLookup), which Telegram
+// itself never linked: it had no QNetworkAccessManager code with the
+// updater turned off. Without this the link fails with LNK2019 DnsFree,
+// DnsQuery_W and others.
+#pragma comment(lib, "dnsapi.lib")
+#endif // Q_OS_WIN
+
 namespace BearGram {
 namespace {
 
