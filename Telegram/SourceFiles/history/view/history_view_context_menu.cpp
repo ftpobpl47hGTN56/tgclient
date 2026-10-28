@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_context_menu.h"
 
+#include "beargram/beargram_post_filter.h"
+
 #include "api/api_attached_stickers.h"
 #include "api/api_editing.h"
 #include "api/api_global_privacy.h"
@@ -1820,6 +1822,14 @@ void FillContextMenuItems(
 		result->addAction(text, [=] {
 			list->copySelectedText();
 		}, &st::menuIconCopy);
+	}
+	if (request.overSelection && request.selectedItems.empty()) {
+		BearGram::PostFilter::AddSelectedTextAction(
+			result,
+			list->getSelectedText().rich.text);
+	}
+	if (item) {
+		BearGram::PostFilter::AddSenderActions(result, item);
 	}
 	if (request.overSelection
 		&& view

@@ -57,12 +57,28 @@ void SetEnabled(bool enabled);
 bool AddPeer(not_null<PeerData*> peer);
 bool AddPeerId(PeerId peer);
 bool AddWord(const QString &word, bool wholeWord);
+bool AddRule(Rule rule);
 
 // Stores the current name and username of a filtered chat (display only).
 void UpdatePeerInfo(not_null<PeerData*> peer);
 
 void SetRuleEnabled(int index, bool enabled);
 void RemoveRule(int index);
+void ClearRules();
+
+// Puts a new rule in place of the one at index, keeping its on/off state.
+bool ReplaceRule(int index, Rule rule);
+
+// Export as JSON (the same as the settings file) or as plain text with one
+// rule per line. Import takes either, merging into the current rules.
+[[nodiscard]] QByteArray ExportJson();
+[[nodiscard]] QByteArray ExportText();
+struct ImportResult {
+	int added = 0;
+	int skipped = 0; // Already there.
+	QStringList usernames; // "@name" lines: need the API to find the id.
+};
+ImportResult Import(const QByteArray &content);
 
 // The id as people see it: 1099189294 for a user,
 // -1001234567890 for a channel or a supergroup, -123456 for a basic group.
@@ -78,6 +94,11 @@ void RemoveRule(int index);
 void AddSenderActions(
 	not_null<Ui::PopupMenu*> menu,
 	not_null<HistoryItem*> item);
+
+// "Add to the post filter" for the selected text.
+void AddSelectedTextAction(
+	not_null<Ui::PopupMenu*> menu,
+	const QString &selected);
 
 void FilterBox(
 	not_null<Ui::GenericBox*> box,
