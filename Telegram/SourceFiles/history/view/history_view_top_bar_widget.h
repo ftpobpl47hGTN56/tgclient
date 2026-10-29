@@ -116,6 +116,12 @@ public:
 	[[nodiscard]] rpl::producer<> clearSelectionRequest() const {
 		return _clearSelection.events();
 	}
+	// BearGram: "Выделить всё" in the selection mode, for sections that
+	// call enableSelectAll() and handle selectAllRequest().
+	void enableSelectAll();
+	[[nodiscard]] rpl::producer<> selectAllRequest() const {
+		return _selectAllRequests.events();
+	}
 	[[nodiscard]] rpl::producer<> cancelChooseForReportRequest() const {
 		return _cancelChooseForReport.events();
 	}
@@ -233,6 +239,8 @@ private:
 	Ui::Animations::Simple _searchShown;
 
 	object_ptr<Ui::RoundButton> _clear;
+	object_ptr<Ui::RoundButton> _selectAll;
+	bool _selectAllEnabled = false;
 	object_ptr<Ui::RoundButton> _forward, _sendNow, _delete;
 	object_ptr<Ui::InputField> _searchField = { nullptr };
 	object_ptr<Ui::FadeWrapScaled<Ui::IconButton>> _chooseFromUser
@@ -284,6 +292,7 @@ private:
 	rpl::event_stream<> _sendNowSelection;
 	rpl::event_stream<> _deleteSelection;
 	rpl::event_stream<> _clearSelection;
+	rpl::event_stream<> _selectAllRequests;
 	rpl::event_stream<> _cancelChooseForReport;
 
 	rpl::lifetime _backLifetime;

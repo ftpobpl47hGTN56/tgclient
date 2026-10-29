@@ -183,6 +183,9 @@ public:
 	[[nodiscard]] auto getSelectionState() const
 		-> HistoryView::TopBarWidget::SelectedState;
 	void clearSelected(bool onlyTextSelection = false);
+	// BearGram: selects the loaded messages from the newest up, skipping
+	// service and hidden ones, up to MaxSelectedItems. Returns how many.
+	int selectAllLoaded();
 	[[nodiscard]] MessageIdsList getSelectedItems() const;
 	[[nodiscard]] MessageIdsList getSelectedForwardItems() const;
 	[[nodiscard]] auto getSelectedEphemeral() const

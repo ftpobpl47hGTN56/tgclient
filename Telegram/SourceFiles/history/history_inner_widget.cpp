@@ -1303,6 +1303,49 @@ bool HistoryInner::hasSelectedText() const {
 	return (_selectedTextItem != nullptr) && !hasSelectedItems();
 }
 
+int HistoryInner::selectAllLoaded() {
+	if (hasSelectRestriction()) {
+		return 0;
+	}
+	clearTextSelection();
+	auto total = int(_selected.size());
+	auto added = 0;
+	const auto collect = [&](History *history) {
+		if (!history) {
+			return;
+		}
+		const auto &blocks = history->blocks;
+		for (auto b = blocks.rbegin(); b != blocks.rend(); ++b) {
+			const auto &messages = (*b)->messages;
+			for (auto m = messages.rbegin(); m != messages.rend(); ++m) {
+				if (total >= MaxSelectedItems) {
+					return;
+				}
+				const auto view = m->get();
+				const auto item = view->data();
+				if (view->isHidden()
+					|| !item->isRegular()
+					|| item->isService()
+					|| !item->canBeSelected()
+					|| _selected.contains(item)) {
+					continue;
+				}
+				_selected.emplace(item);
+				++total;
+				++added;
+			}
+		}
+	};
+	collect(_history);
+	collect(_migrated);
+	if (added) {
+		_accessibilitySelectionAnchor = nullptr;
+		update();
+		_widget->updateTopBarSelection();
+	}
+	return added;
+}
+
 void HistoryInner::clearTextSelection() {
 	if (_selectedTextItem) {
 		if (const auto view = viewByItem(_selectedTextItem)) {

@@ -121,6 +121,7 @@ TopBarWidget::TopBarWidget(
 , _controller(controller)
 , _primaryWindow(controller->isPrimary())
 , _clear(this, tr::lng_selected_clear(), st::topBarClearButton)
+, _selectAll(this, rpl::single(u"Выделить всё"_q), st::topBarClearButton)
 , _forward(this, tr::lng_selected_forward(), st::defaultActiveButton)
 , _sendNow(this, tr::lng_selected_send_now(), st::defaultActiveButton)
 , _delete(this, tr::lng_selected_delete(), st::defaultActiveButton)
@@ -137,6 +138,9 @@ TopBarWidget::TopBarWidget(
 	setAttribute(Qt::WA_OpaquePaintEvent);
 
 	_clear->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
+	_selectAll->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
+	_selectAll->setClickedCallback([=] { _selectAllRequests.fire({}); });
+	_selectAll->hide();
 	_forward->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_sendNow->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	_delete->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
@@ -1176,6 +1180,7 @@ void TopBarWidget::updateControlsGeometry() {
 	auto buttonsWidth = (_forward->isHidden() ? 0 : _forward->contentWidth())
 		+ (_sendNow->isHidden() ? 0 : _sendNow->contentWidth())
 		+ (_delete->isHidden() ? 0 : _delete->contentWidth())
+		+ (_selectAll->isHidden() ? 0 : _selectAll->width())
 		+ _clear->width();
 	buttonsWidth += buttonsLeft + st::topBarActionSkip * 3;
 
@@ -1231,6 +1236,9 @@ void TopBarWidget::updateControlsGeometry() {
 		}
 	}
 	_clear->moveToRight(st::topBarActionSkip, selectedButtonsTop);
+	_selectAll->moveToRight(
+		st::topBarActionSkip + _clear->width(),
+		selectedButtonsTop);
 
 	if (!_cancelChoose->isHidden()) {
 		_leftTaken = 0;
@@ -1348,6 +1356,12 @@ void TopBarWidget::setAnimatingMode(bool enabled) {
 	}
 }
 
+void TopBarWidget::enableSelectAll() {
+	_selectAllEnabled = true;
+	updateControlsVisibility();
+	updateControlsGeometry();
+}
+
 void TopBarWidget::updateControlsVisibility() {
 	if (!_activeChat.key) {
 		return;
@@ -1357,6 +1371,7 @@ void TopBarWidget::updateControlsVisibility() {
 	}
 	const auto visible = showSelectedState() || _selectedShown.animating();
 	_clear->setVisible(visible);
+	_selectAll->setVisible(_selectAllEnabled && visible);
 	_delete->setVisible(_canDelete && visible);
 	_forward->setVisible(_canForward && visible);
 	_sendNow->setVisible(_canSendNow && visible);
