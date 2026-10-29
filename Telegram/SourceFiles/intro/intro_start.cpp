@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "intro/intro_start.h"
 
 #include "beargram/beargram_account_transfer.h"
+#include "intro/intro_widget.h"
 #include "window/window_controller.h"
 #include "styles/style_intro.h"
 

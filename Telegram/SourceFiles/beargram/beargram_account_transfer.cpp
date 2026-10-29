@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "mtproto/mtp_instance.h"
+#include "mtproto/mtproto_dc_options.h"
 #include "settings/settings_common.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
@@ -372,12 +373,12 @@ struct ImportResult {
 [[nodiscard]] not_null<Ui::PasswordInput*> AddPasswordField(
 		not_null<Ui::GenericBox*> box,
 		const QString &placeholder) {
+	box->addSkip(st::boxLittleSkip);
 	return box->addRow(
 		object_ptr<Ui::PasswordInput>(
 			box,
 			st::defaultInputField,
-			rpl::single(placeholder)),
-		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
+			rpl::single(placeholder)));
 }
 
 void ExportBox(not_null<Ui::GenericBox*> box) {
