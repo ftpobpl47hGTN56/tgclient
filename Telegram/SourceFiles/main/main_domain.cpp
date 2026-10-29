@@ -374,6 +374,44 @@ not_null<Main::Account*> Domain::add(MTP::Environment environment) {
 	return account;
 }
 
+not_null<Main::Account*> Domain::addWithAuthorization(
+		MTP::Environment environment,
+		const QByteArray &authorization) {
+	Expects(started());
+	Expects(_accounts.size() < kPremiumMaxAccounts);
+
+	// The same as add(), but the account gets the keys, the main DC and the
+	// user id before it starts, as if they were read from its own tdata.
+	// The config (DC addresses) is taken from an account of this app.
+	auto config = [&] {
+		for (const auto &[index, account] : _accounts) {
+			if (account->mtp().environment() == environment) {
+				return std::make_unique<MTP::Config>(account->mtp().config());
+			}
+		}
+		return (environment == MTP::Environment::Production)
+			? std::make_unique<MTP::Config>(
+				Core::App().fallbackProductionConfig())
+			: std::make_unique<MTP::Config>(environment);
+	}();
+	auto index = 0;
+	while (ranges::contains(_accounts, index, &AccountWithIndex::index)) {
+		++index;
+	}
+	_accounts.push_back(AccountWithIndex{
+		.index = index,
+		.account = std::make_unique<Account>(this, _dataName, index)
+	});
+	const auto account = _accounts.back().account.get();
+	account->setMtpAuthorization(authorization);
+	_local->startAdded(account, std::move(config));
+	account->local().writeMtpData();
+	watchSession(account);
+	_accountsChanges.fire({});
+	scheduleWriteAccounts();
+	return account;
+}
+
 void Domain::addActivated(MTP::Environment environment, bool newWindow) {
 	const auto added = [&](not_null<Main::Account*> account) {
 		if (newWindow) {

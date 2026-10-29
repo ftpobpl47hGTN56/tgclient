@@ -54,6 +54,16 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
 - "Report" for users in private chats: in the profile / chat menu and on
   single messages (`Filler::addReport`, `HistoryItem::suggestReport`).
 - Up to 15 accounts without Telegram Premium (`Main::Domain::kPremiumMaxAccounts`).
+- Account transfer (`beargram_account_transfer`): Settings > BearGram >
+  Перенос аккаунтов exports every logged in account (its MTP authorization:
+  user id, main DC, keys) into a `.bgaccounts` file encrypted with
+  AES-256-GCM and a password (PBKDF2-SHA256), and imports such a file into
+  another desktop BearGram as new accounts (`Main::Domain::addWithAuthorization`),
+  also from the welcome screen. "Загрузить чаты заново" restarts the app.
+- Speech text of voice and round messages is collapsed like long messages,
+  and "Читать полностью" shows it (`history_view_document.cpp`).
+- "Выделить всё" in the selection bar of a chat selects the loaded messages
+  from the newest up to 100 (`HistoryInner::selectAllLoaded`).
 
 ## Configure (Windows, x64)
 

@@ -32,6 +32,8 @@ public:
 	void setInnerFocus() override;
 
 private:
+	void setupBearGramImport();
+
 	rpl::event_stream<> _nextButtonFocusRequests;
 
 };

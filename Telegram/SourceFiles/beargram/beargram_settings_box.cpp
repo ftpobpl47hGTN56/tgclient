@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_settings.h"
 #include "beargram/beargram_deleted_log.h"
 #include "beargram/beargram_updates.h"
+#include "beargram/beargram_account_transfer.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/show.h"
 #include "lang/lang_keys.h"
@@ -295,6 +296,8 @@ void SettingsBox(not_null<Ui::GenericBox*> box) {
 		container,
 		rpl::single(u"Изменения применятся к чатам после их повторного "
 			"открытия. Свои сообщения никогда не скрываются."_q));
+
+	AccountTransfer::AddSettingsSection(container, box->uiShow());
 
 	Ui::AddSkip(container);
 	Ui::AddSubsectionTitle(container, rpl::single(u"Обновления"_q));

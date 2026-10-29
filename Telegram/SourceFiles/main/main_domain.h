@@ -95,6 +95,13 @@ public:
 	void notifyUnreadBadgeChanged();
 
 	[[nodiscard]] not_null<Main::Account*> add(MTP::Environment environment);
+
+	// BearGram: adds an account already logged in with an authorization
+	// moved from another BearGram (beargram_account_transfer.cpp).
+	// authorization is Account::serializeMtpAuthorization() of that account.
+	not_null<Main::Account*> addWithAuthorization(
+		MTP::Environment environment,
+		const QByteArray &authorization);
 	void maybeActivate(not_null<Main::Account*> account);
 	void activate(not_null<Main::Account*> account);
 	void addActivated(MTP::Environment environment, bool newWindow = false);
