@@ -1130,7 +1130,8 @@ HistoryWidget::HistoryWidget(
 	_topBar->selectAllRequest(
 	) | rpl::on_next([=] {
 		if (_list && !_list->selectAllLoaded()) {
-			controller()->showToast(
+			// "controller" here is the constructor argument.
+			controller->showToast(
 				u"Больше нечего выделить: уже выбрано максимум (%1) "
 				"или все загруженные сообщения."_q.arg(int(MaxSelectedItems)));
 		}

@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
+#include "ui/rp_widget.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/password_input.h"
@@ -373,12 +374,22 @@ struct ImportResult {
 [[nodiscard]] not_null<Ui::PasswordInput*> AddPasswordField(
 		not_null<Ui::GenericBox*> box,
 		const QString &placeholder) {
+	// PasswordInput is a QLineEdit, not an RpWidget, so the layout can't
+	// hold it directly: it lives in a wrap that follows the row width.
 	box->addSkip(st::boxLittleSkip);
-	return box->addRow(
-		object_ptr<Ui::PasswordInput>(
-			box,
-			st::defaultInputField,
-			rpl::single(placeholder)));
+	const auto wrap = box->addRow(object_ptr<Ui::RpWidget>(box));
+	const auto field = Ui::CreateChild<Ui::PasswordInput>(
+		wrap,
+		st::defaultInputField,
+		rpl::single(placeholder));
+	field->show();
+	wrap->resize(wrap->width(), field->height());
+	wrap->widthValue() | rpl::on_next([=](int width) {
+		field->resize(width, field->height());
+		field->move(0, 0);
+		wrap->resize(width, field->height());
+	}, wrap->lifetime());
+	return field;
 }
 
 void ExportBox(not_null<Ui::GenericBox*> box) {
