@@ -6,7 +6,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "beargram/beargram_read_full.h"
 
+#include "api/api_transcribes.h"
+#include "apiwrap.h"
+#include "history/history.h"
 #include "history/history_item.h"
+#include "main/main_session.h"
 #include "lang/lang_keys.h"
 #include "ui/layers/generic_box.h"
 #include "ui/layers/show.h"
@@ -27,11 +31,20 @@ void AddReadFullAction(
 		not_null<Ui::PopupMenu*> menu,
 		not_null<HistoryItem*> item,
 		std::shared_ptr<Ui::Show> show) {
-	const auto &text = item->originalText();
-	if (!show || text.text.size() < kMinLength) {
+	auto copy = item->originalText();
+	// The speech text of a voice or round message, when it is shown.
+	const auto &transcribe = item->history()->session().api().transcribes(
+		).entry(item);
+	if (transcribe.shown && !transcribe.result.isEmpty()) {
+		auto speech = TextWithEntities{ transcribe.result };
+		if (!copy.text.isEmpty()) {
+			speech.append(u"\n\n"_q).append(std::move(copy));
+		}
+		copy = std::move(speech);
+	}
+	if (!show || copy.text.size() < kMinLength) {
 		return;
 	}
-	const auto copy = text;
 	menu->addAction(u"Читать полностью"_q, [=] {
 		show->show(Box([=](not_null<Ui::GenericBox*> box) {
 			box->setTitle(rpl::single(u"Читать полностью"_q));

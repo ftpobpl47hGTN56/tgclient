@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/media/history_view_document.h"
 
+#include "beargram/beargram_long_messages.h"
+
 #include "base/random.h"
 #include "lang/lang_keys.h"
 #include "lottie/lottie_icon.h"
@@ -49,6 +51,30 @@ namespace HistoryView {
 namespace {
 
 constexpr auto kAudioVoiceMsgUpdateView = crl::time(100);
+
+// BearGram: long speech text of voice messages is collapsed like long
+// messages, with the same "Развернуть" / "Свернуть" toggle.
+[[nodiscard]] BearGram::CollapsedText CollapsedTranscribe(
+		not_null<const HistoryItem*> item,
+		const Ui::Text::String &text,
+		int width) {
+	return BearGram::ComputeCollapsedText(
+		item,
+		text,
+		width,
+		text.countHeight(width),
+		st::msgFont->height);
+}
+
+[[nodiscard]] int TranscribeHeight(
+		not_null<const HistoryItem*> item,
+		const Ui::Text::String &text,
+		int width) {
+	const auto collapse = CollapsedTranscribe(item, text, width);
+	return collapse.collapsible
+		? collapse.totalHeight
+		: text.countHeight(width);
+}
 
 constexpr auto kVoiceBlobAlpha = 0.25;
 constexpr auto kVoiceBlobMaxSpeed = 2.5;
@@ -638,7 +664,10 @@ QSize Document::countOptimalSize() {
 		auto captionw = maxWidth
 			- st::msgPadding.left()
 			- st::msgPadding.right();
-		minHeight += voice->transcribeText.countHeight(captionw);
+		minHeight += TranscribeHeight(
+			_realParent,
+			voice->transcribeText,
+			captionw);
 		if (isBubbleBottom()) {
 			minHeight += st::msgPadding.bottom();
 		}
@@ -695,7 +724,10 @@ QSize Document::countCurrentSize(int newWidth) {
 	}
 	auto captionw = newWidth - st::msgPadding.left() - st::msgPadding.right();
 	if (hasTranscribe) {
-		newHeight += voice->transcribeText.countHeight(captionw);
+		newHeight += TranscribeHeight(
+			_realParent,
+			voice->transcribeText,
+			captionw);
 		if (captioned) {
 			newHeight += st::mediaCaptionSkip;
 		} else if (isBubbleBottom()) {
@@ -1086,8 +1118,32 @@ void Document::draw(
 	auto captiontop = bottom;
 	if (voice && !voice->transcribeText.isEmpty()) {
 		p.setPen(stm->historyTextFg);
-		voice->transcribeText.draw(p, st::msgPadding.left(), bottom, captionw, style::al_left, 0, -1, selection);
-		captiontop += voice->transcribeText.countHeight(captionw) + st::mediaCaptionSkip;
+		const auto collapse = CollapsedTranscribe(
+			_realParent,
+			voice->transcribeText,
+			captionw);
+		if (collapse.collapsible) {
+			voice->transcribeText.draw(p, {
+				.position = { st::msgPadding.left(), bottom },
+				.availableWidth = captionw,
+				.palette = &stm->textPalette,
+				.selection = selection,
+				.elisionLines = collapse.visibleLines,
+			});
+			p.setFont(st::msgFont);
+			p.setPen(stm->textPalette.linkFg);
+			p.drawTextLeft(
+				st::msgPadding.left(),
+				bottom + collapse.toggleTop,
+				width,
+				BearGram::ToggleText(collapse.expanded));
+		} else {
+			voice->transcribeText.draw(p, st::msgPadding.left(), bottom, captionw, style::al_left, 0, -1, selection);
+		}
+		captiontop += TranscribeHeight(
+			_realParent,
+			voice->transcribeText,
+			captionw) + st::mediaCaptionSkip;
 		selection = HistoryView::UnshiftItemSelection(selection, voice->transcribeText);
 	}
 	if (const auto captioned = Get<HistoryDocumentCaptioned>()) {
@@ -1414,8 +1470,28 @@ TextState Document::textState(
 		transcribeLength = voice->transcribeText.length();
 		if (transcribeLength > 0) {
 			auto captionw = width - st::msgPadding.left() - st::msgPadding.right();
-			transcribeHeight = voice->transcribeText.countHeight(captionw);
+			const auto collapse = CollapsedTranscribe(
+				_realParent,
+				voice->transcribeText,
+				captionw);
+			transcribeHeight = collapse.collapsible
+				? collapse.totalHeight
+				: voice->transcribeText.countHeight(captionw);
 			painth -= transcribeHeight;
+			if (collapse.collapsible) {
+				const auto top = bottom + collapse.toggleTop;
+				const auto left = st::msgPadding.left();
+				const auto toggleWidth = st::msgFont->width(
+					BearGram::ToggleText(collapse.expanded));
+				if (base::in_range(point.y(), top, top + collapse.toggleHeight)
+					&& base::in_range(point.x(), left, left + toggleWidth)) {
+					result.link = BearGram::ToggleLink(_realParent);
+					return result;
+				} else if (point.y() >= top
+					&& point.y() < bottom + transcribeHeight) {
+					return result;
+				}
+			}
 			if (point.y() >= bottom && point.y() < bottom + transcribeHeight) {
 				result = TextState(_parent, voice->transcribeText.getState(
 					point - QPoint(st::msgPadding.left(), bottom),
