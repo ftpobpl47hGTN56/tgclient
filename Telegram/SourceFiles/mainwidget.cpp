@@ -122,7 +122,11 @@ base::options::toggle OptionUseNewChatView({
 	.id = kOptionUseNewChatView,
 	.name = "New chat view",
 	.description = "Open chats through the new section.",
-	.defaultValue = true,
+	// BearGram: Telegram 7.3.4 made the new section the default, but the
+	// BearGram chat features (Удалить у себя, Читать полностью, История
+	// правок, Выделить всё) are built into the classic HistoryWidget.
+	// Keep the classic one until they are ported to the new section.
+	.defaultValue = false,
 });
 
 } // namespace
