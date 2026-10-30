@@ -506,6 +506,17 @@ ChatWidget::ChatWidget(
 	) | rpl::on_next([=] {
 		clearSelected();
 	}, _topBar->lifetime());
+	// BearGram: "Выделить всё" in the selection mode.
+	_topBar->enableSelectAll();
+	_topBar->selectAllRequest(
+	) | rpl::on_next([=] {
+		if (_inner && !_inner->selectAllLoaded()) {
+			this->controller()->showToast(
+				u"Больше нечего выделить: уже выбрано максимум (%1) "
+				"или все загруженные сообщения."_q.arg(
+					int(MaxSelectedItems)));
+		}
+	}, _topBar->lifetime());
 	_topBar->cancelChooseForReportRequest(
 	) | rpl::on_next([=] {
 		this->controller()->clearChooseReportMessages();

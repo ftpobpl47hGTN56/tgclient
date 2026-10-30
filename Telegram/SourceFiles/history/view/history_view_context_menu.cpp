@@ -8,6 +8,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_context_menu.h"
 
 #include "beargram/beargram_post_filter.h"
+#include "beargram/beargram_deleted_log.h"
+#include "beargram/beargram_local_hide.h"
+#include "beargram/beargram_read_full.h"
 
 #include "api/api_attached_stickers.h"
 #include "api/api_editing.h"
@@ -1947,6 +1950,27 @@ void FillContextMenuItems(
 
 	AddCopyLinkAction(result, link);
 	AddMessageActions(result, request, list);
+
+	// BearGram: the same items as in the classic chat (HistoryInner).
+	if (request.overSelection && !request.selectedItems.empty()) {
+		BearGram::AddHideSelectedAction(
+			result,
+			&list->session(),
+			list->getSelectedIds(),
+			[=] { list->clearSelected(); });
+	} else if (item && !hasSelection) {
+		if (!item->isUploading()) {
+			BearGram::AddLocalHideActions(result, item);
+		}
+		BearGram::AddReadFullAction(
+			result,
+			item,
+			list->controller()->uiShow());
+		BearGram::AddEditHistoryAction(
+			result,
+			item,
+			list->controller()->uiShow());
+	}
 
 	const auto wasAmount = result->actions().size();
 	if (const auto textItem = view ? view->textItem() : item) {

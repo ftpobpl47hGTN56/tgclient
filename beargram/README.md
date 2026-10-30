@@ -79,6 +79,38 @@ would download the official Telegram Desktop and replace BearGram with it.
 Then open `out\Telegram.slnx` in Visual Studio 2026 and build the `Telegram`
 project. The result is `out\Debug\BearGram.exe` (or `out\Release\BearGram.exe`).
 
+## Where BearGram hooks into Telegram
+
+Telegram Desktop has two chat screens: the classic `HistoryWidget` with
+`HistoryInner`, and the new `ChatWidget` with `ListWidget` (default since
+Telegram 7.3.4; BearGram keeps the classic one by default in
+`mainwidget.cpp`, option "New chat view" in Experimental settings). Hooks in
+code shared by both screens work everywhere; screen-specific hooks have to
+exist in both. After a Telegram update, check this list first.
+
+| Feature | Shared code (both screens) | Classic screen | New screen |
+|---|---|---|---|
+| Filters, post filter, hidden messages | `history_view_message.cpp` (`Message::isHidden`) | | |
+| Long messages collapse, rich messages | `history_view_message.cpp` | | |
+| Voice speech text collapse | `media/history_view_document.cpp` | | |
+| "удалено" mark | `history_view_bottom_info.cpp` | | |
+| Deleted messages kept, after restart | `data_session.cpp`, `history.cpp` | | |
+| Удалить у себя, Читать полностью, История правок (menu) | | `history_inner_widget.cpp` | `history_view_context_menu.cpp` |
+| Удалить выбранные у себя (menu) | | `history_inner_widget.cpp` | `history_view_context_menu.cpp` |
+| В фильтр постов (sender, selected text) | | `history_inner_widget.cpp` | `history_view_context_menu.cpp` |
+| Выделить всё | `history_view_top_bar_widget.cpp` (button) | `history_widget.cpp`, `HistoryInner::selectAllLoaded` | `history_view_chat_section.cpp`, `ListWidget::selectAllLoaded` |
+| Post filter button in the chat header | `history_view_top_bar_widget.cpp` | | |
+| Chat menu items (logger switch, local name, wallpapers, report) | `window_peer_menu.cpp` | | |
+| Local wallpapers | `section_widget.cpp` | | |
+| Local names | `data_user.cpp`, `data_peer.cpp` | | |
+| Sponsored messages | `sponsored_messages.cpp` | | |
+| Update bar in the chats list | `dialogs_widget.cpp` | | |
+| Accounts limit, account transfer | `main_domain.cpp`, `intro_start.cpp` | | |
+| Name, icon, app id | `version.h`, `Telegram.rc`, `windows_app_user_model_id.cpp`, `CMakeLists.txt` | | |
+
+Every hook is marked with a `BearGram` comment:
+`git grep -n BearGram -- Telegram/SourceFiles ':!Telegram/SourceFiles/beargram'`.
+
 ## Updates from Telegram Desktop and cloud builds
 
 - Update check in the client (`beargram/beargram_updates`): shortly after the

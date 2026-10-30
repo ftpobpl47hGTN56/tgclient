@@ -2068,6 +2068,48 @@ void ListWidget::clearSelected() {
 	}
 }
 
+int ListWidget::selectAllLoaded() {
+	if (hasSelectRestriction()) {
+		return 0;
+	} else if (hasSelectedText()) {
+		clearSelected();
+	}
+	// _items may be inverted, the newest messages go first by id.
+	auto candidates = std::vector<not_null<Element*>>();
+	candidates.reserve(_items.size());
+	for (const auto &view : _items) {
+		const auto item = view->data();
+		if (!view->isHidden()
+			&& item->isRegular()
+			&& !item->isService()
+			&& !_selected.contains(item->fullId())) {
+			candidates.push_back(view);
+		}
+	}
+	ranges::sort(candidates, [](not_null<Element*> a, not_null<Element*> b) {
+		return a->data()->id > b->data()->id;
+	});
+	auto total = int(_selected.size());
+	auto added = 0;
+	for (const auto &view : candidates) {
+		const auto item = view->data();
+		if (!isGoodForSelection(_selected, item, total)) {
+			if (total > MaxSelectedItems) {
+				break;
+			}
+			continue;
+		} else if (addToSelection(_selected, item)) {
+			++added;
+		}
+	}
+	if (added) {
+		_accessibilitySelectionAnchor = nullptr;
+		pushSelectedItems();
+		update();
+	}
+	return added;
+}
+
 void ListWidget::clearTextSelection() {
 	if (_selectedTextItem) {
 		if (const auto view = viewForItem(_selectedTextItem)) {

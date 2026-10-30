@@ -379,6 +379,9 @@ public:
 	[[nodiscard]] MessageSelection getSelectedTextSelection(
 		not_null<HistoryItem*> item) const;
 	void clearSelected();
+	// BearGram: selects the loaded messages from the newest up, skipping
+	// service and hidden ones, up to MaxSelectedItems. Returns how many.
+	int selectAllLoaded();
 	void cancelSelection();
 	void selectItem(not_null<HistoryItem*> item);
 	void selectItemAsGroup(not_null<HistoryItem*> item);
