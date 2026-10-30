@@ -90,6 +90,7 @@ class ChooseThemeController;
 class ElasticScroll;
 struct ChatPaintHighlight;
 class ChatStyle;
+struct MessageSendingReveal;
 template <typename Widget>
 class SlideWrap;
 } // namespace Ui
@@ -695,7 +696,8 @@ private:
 	void startItemRevealAnimations();
 	void revealItemsCallback();
 
-	void startMessageSendingAnimation(not_null<HistoryItem*> item);
+	std::optional<Ui::MessageSendingReveal> startMessageSendingAnimation(
+		not_null<HistoryItem*> item);
 
 	// Does any of the shown histories has this flag set.
 	bool hasPendingResizedItems() const;
@@ -884,7 +886,7 @@ private:
 	QPointer<HistoryInner> _list;
 	History *_migrated = nullptr;
 	History *_history = nullptr;
-	mutable Data::ForumTopic *_creatingBotTopic = nullptr;
+	mutable base::weak_ptr<Data::ForumTopic> _creatingBotTopic;
 	rpl::lifetime _historySponsoredPreloading;
 
 	// Initial updateHistoryGeometry() was called.
@@ -1022,6 +1024,7 @@ private:
 		not_null<HistoryItem*>,
 		ItemRevealAnimation> _itemRevealAnimations;
 	int _itemsRevealHeight = 0;
+	rpl::event_stream<> _itemsRevealHeightChanges;
 
 
 	bool _sponsoredMessagesStateKnown = false;
@@ -1036,5 +1039,7 @@ private:
 	SendPaymentHelper _sendPayment;
 
 	rpl::event_stream<> _cancelRequests;
+	// Last, so the handler ends before any members it uses are destroyed.
+	rpl::lifetime _recordingStateLifetime;
 
 };

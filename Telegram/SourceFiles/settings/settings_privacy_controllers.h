@@ -37,8 +37,6 @@ public:
 	void loadMoreRows() override;
 	void loadAll();
 
-	[[nodiscard]] rpl::producer<int> rowsCountChanges() const;
-
 	static void BlockNewPeer(not_null<Window::SessionController*> window);
 
 private:
@@ -56,8 +54,6 @@ private:
 	bool _loadAll = false;
 
 	base::has_weak_ptr _guard;
-
-	rpl::event_stream<int> _rowsCountChanges;
 
 };
 

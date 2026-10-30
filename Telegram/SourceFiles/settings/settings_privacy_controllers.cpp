@@ -425,7 +425,6 @@ void BlockedBoxController::handleBlockedEvent(not_null<PeerData*> user) {
 	} else if (auto row = delegate()->peerListFindRow(user->id.value)) {
 		delegate()->peerListRemoveRow(row);
 		delegate()->peerListRefreshRows();
-		_rowsCountChanges.fire(delegate()->peerListFullRowsCount());
 	}
 }
 
@@ -450,7 +449,6 @@ bool BlockedBoxController::appendRow(not_null<PeerData*> peer) {
 		return false;
 	}
 	delegate()->peerListAppendRow(createRow(peer));
-	_rowsCountChanges.fire(delegate()->peerListFullRowsCount());
 	return true;
 }
 
@@ -459,7 +457,6 @@ bool BlockedBoxController::prependRow(not_null<PeerData*> peer) {
 		return false;
 	}
 	delegate()->peerListPrependRow(createRow(peer));
-	_rowsCountChanges.fire(delegate()->peerListFullRowsCount());
 	return true;
 }
 
@@ -482,10 +479,6 @@ std::unique_ptr<PeerListRow> BlockedBoxController::createRow(
 	}();
 	row->setCustomStatus(status);
 	return row;
-}
-
-rpl::producer<int> BlockedBoxController::rowsCountChanges() const {
-	return _rowsCountChanges.events();
 }
 
 PhoneNumberPrivacyController::PhoneNumberPrivacyController(
