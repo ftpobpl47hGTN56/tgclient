@@ -385,7 +385,13 @@ void Widget::BottomButton::paintEvent(QPaintEvent *e) {
 	const auto &font = over ? _st.overFont : _st.font;
 	p.setFont(font);
 	p.setRenderHint(QPainter::TextAntialiasing);
-	p.setPen(over ? _st.overColor : _st.color);
+	// BearGram: the theme's button text color (green in many themes) merges
+	// with the green gradient of the update bar, white reads on any theme.
+	if (_hasTextIcon) {
+		p.setPen(QColor(255, 255, 255));
+	} else {
+		p.setPen(over ? _st.overColor : _st.color);
+	}
 
 	if (width() >= st::columnMinimalWidthLeft) {
 		r.setTop(_st.textTop);
@@ -1695,9 +1701,13 @@ void Widget::startScrollUpButtonAnimation(bool shown) {
 
 void Widget::updateScrollUpPosition() {
 	// _scrollToTop is a child widget of _scroll, not me.
+	// BearGram: keep the button off the update bar, it looked glued to it.
+	const auto barSkip = (_updateTelegram && !_updateTelegram->isHidden())
+		? st::historyToDownPosition.y()
+		: 0;
 	auto top = anim::interpolate(
 		0,
-		_scrollToTop->height() + st::connectingMargin.top(),
+		_scrollToTop->height() + st::connectingMargin.top() + barSkip,
 		_scrollToTopShown.value(_scrollToTopIsShown ? 1. : 0.));
 	_scrollToTop->moveToRight(
 		st::historyToDownPosition.x(),
