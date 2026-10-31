@@ -66,6 +66,11 @@ void ToggleFavedSticker(
 	if (faved && !document->sticker()) {
 		return;
 	}
+	if (!faved) {
+		// BearGram: a favorite the server already dropped over its limit may
+		// fail to unfave there, it is removed from the local list anyway.
+		document->owner().stickers().setFaved(show, document, false);
+	}
 	auto done = [=] {
 		document->owner().stickers().setFaved(show, document, faved);
 	};

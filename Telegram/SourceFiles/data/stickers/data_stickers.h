@@ -28,6 +28,10 @@ class Show;
 
 namespace Data {
 
+// BearGram: favorite stickers kept locally, the server keeps 5 (10 with
+// Premium). See Stickers::specialSetReceived and checkFavedLimit.
+inline constexpr auto kBearGramFavedLimit = 100;
+
 class Session;
 class DocumentMedia;
 

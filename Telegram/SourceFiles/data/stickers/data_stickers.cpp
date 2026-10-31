@@ -524,7 +524,9 @@ void Stickers::checkFavedLimit(
 		std::shared_ptr<ChatHelpers::Show> show) {
 	const auto session = &_owner->session();
 	const auto limits = Data::PremiumLimits(session);
-	if (set.stickers.size() <= limits.stickersFavedCurrent()) {
+	// BearGram: favorites are kept locally up to kBearGramFavedLimit, the
+	// server keeps only its own 5 (10 with Premium) newest of them.
+	if (set.stickers.size() <= kBearGramFavedLimit) {
 		return;
 	}
 	auto removing = set.stickers.back();
@@ -851,7 +853,13 @@ void Stickers::specialSetReceived(
 	auto &sets = setsRef();
 	auto it = sets.find(setId);
 
-	if (items.isEmpty()) {
+	// BearGram: the server list of favorites is merged into the local one,
+	// so stickers the server dropped over its limit stay in favorites.
+	const auto keepLocalFaved = (setId == FavedSetId)
+		&& (it != sets.cend())
+		&& !it->second->stickers.isEmpty();
+	if (items.isEmpty() && keepLocalFaved) {
+	} else if (items.isEmpty()) {
 		if (it != sets.cend()) {
 			sets.erase(it);
 		}
@@ -907,6 +915,35 @@ void Stickers::specialSetReceived(
 			customIt = sets.end();
 		}
 
+		// BearGram: new server favorites first, then the local list in its
+		// order, with the emoji of the stickers the server no longer has.
+		auto localOnlyEmoji = base::flat_map<EmojiPtr, StickersPack>();
+		if (keepLocalFaved) {
+			auto merged = StickersPack();
+			merged.reserve(pack.size() + set->stickers.size());
+			for (const auto document : std::as_const(pack)) {
+				if (set->stickers.indexOf(document) < 0) {
+					merged.push_back(document);
+				}
+			}
+			for (const auto document : std::as_const(set->stickers)) {
+				if (merged.size() >= kBearGramFavedLimit) {
+					break;
+				}
+				merged.push_back(document);
+				if (pack.indexOf(document) >= 0) {
+					continue;
+				}
+				for (const auto &[emoji, list] : set->emoji) {
+					if (list.indexOf(document) >= 0) {
+						localOnlyEmoji[emoji].push_back(document);
+					}
+				}
+			}
+			pack = std::move(merged);
+			dates.clear();
+		}
+
 		auto writeRecent = false;
 		auto &recent = getRecentPack();
 		for (auto i = recent.begin(); i != recent.cend();) {
@@ -922,6 +959,14 @@ void Stickers::specialSetReceived(
 			sets.erase(it);
 		} else {
 			setPackAndEmoji(*set, std::move(pack), std::move(dates), packs);
+			for (const auto &[emoji, list] : localOnlyEmoji) {
+				auto &existing = set->emoji[emoji];
+				for (const auto document : list) {
+					if (existing.indexOf(document) < 0) {
+						existing.push_back(document);
+					}
+				}
+			}
 		}
 
 		if (writeRecent) {
