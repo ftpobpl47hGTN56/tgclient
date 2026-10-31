@@ -556,7 +556,7 @@ void FilterBox(
 		object_ptr<Ui::Checkbox>(
 			container,
 			u"Слово целиком (не скрывать «котлета» по «кот»)"_q,
-			false,
+			true,
 			st::defaultBoxCheckbox),
 		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
 

@@ -45,13 +45,32 @@ struct State {
 
 	// Built from the enabled rules by Rebuild().
 	base::flat_set<PeerId> peers;
-	base::flat_set<QString> usernames; // Lowercase, without '@'.
+	// Lowercase username without '@' -> the rule's peer (users and
+	// channels): posts mentioning @username or t.me/username are hidden.
+	base::flat_map<QString, PeerId> usernames;
 	QRegularExpression words;
 	bool hasWords = false;
 
 	int version = 0;
 	base::flat_map<FullMsgId, Cached> cache;
 };
+
+// 2: single letter-only words became "whole word" (a rule "дис" hid
+// "диссеминированный"), new rules are whole word by default.
+constexpr auto kFormat = 2;
+
+[[nodiscard]] bool IsSingleWord(const QString &text) {
+	static const auto letters = QRegularExpression(
+		u"^\\p{L}+$"_q,
+		QRegularExpression::UseUnicodePropertiesOption);
+	return letters.match(text.trimmed()).hasMatch();
+}
+
+void MigrateWholeWord(Rule &rule) {
+	if (rule.type == RuleType::Word && IsSingleWord(rule.text)) {
+		rule.wholeWord = true;
+	}
+}
 
 [[nodiscard]] QString FilePath() {
 	return cWorkingDir() + u"tdata/beargram_post_filter.json"_q;
@@ -77,10 +96,10 @@ void Rebuild(State &state) {
 			continue;
 		} else if (rule.type == RuleType::Peer) {
 			state.peers.emplace(rule.peer);
-			// Users only: a channel's own posts often end with its
-			// @username, and a channel feed must not hide itself.
-			if (peerIsUser(rule.peer) && !rule.username.isEmpty()) {
-				state.usernames.emplace(rule.username.toLower());
+			// Users and channels. A channel's own posts often end with
+			// its @username: those are skipped in HasMention().
+			if (!rule.username.isEmpty()) {
+				state.usernames[rule.username.toLower()] = rule.peer;
 			}
 		} else if (!rule.text.isEmpty()) {
 			patterns.push_back(WordPattern(rule));
@@ -144,23 +163,30 @@ void Rebuild(State &state) {
 		rules.push_back(RuleToJson(rule));
 	}
 	auto object = QJsonObject();
+	object.insert(u"format"_q, kFormat);
 	object.insert(u"enabled"_q, state.enabled.current());
 	object.insert(u"rules"_q, rules);
 	return QJsonDocument(object).toJson(QJsonDocument::Indented);
 }
 
-void Load(State &state) {
+// Returns true if old rules were migrated and the file must be saved.
+bool Load(State &state) {
 	auto file = QFile(FilePath());
 	if (!file.open(QIODevice::ReadOnly)) {
-		return;
+		return false;
 	}
 	const auto object = QJsonDocument::fromJson(file.readAll()).object();
+	const auto old = (object.value(u"format"_q).toInt(1) < kFormat);
 	state.enabled = object.value(u"enabled"_q).toBool(true);
 	for (const auto value : object.value(u"rules"_q).toArray()) {
 		if (auto rule = RuleFromJson(value.toObject())) {
+			if (old) {
+				MigrateWholeWord(*rule);
+			}
 			state.rules.push_back(std::move(*rule));
 		}
 	}
+	return old && !state.rules.empty();
 }
 
 void Save(const State &state) {
@@ -173,8 +199,11 @@ void Save(const State &state) {
 [[nodiscard]] State &Instance() {
 	static auto state = State();
 	static const auto loaded = [] {
-		Load(state);
+		const auto migrated = Load(state);
 		Rebuild(state);
+		if (migrated) {
+			Save(state);
+		}
 		return true;
 	}();
 	(void)loaded;
@@ -255,34 +284,62 @@ bool Insert(State &state, Rule rule) {
 	return true;
 }
 
+// A username of a filtered user or channel, not of the chat itself.
+[[nodiscard]] bool IsFilteredUsername(
+		const State &state,
+		const QString &username,
+		PeerId chat) {
+	const auto i = state.usernames.find(username.toLower());
+	return (i != end(state.usernames)) && (i->second != chat);
+}
+
+[[nodiscard]] bool HasFilteredUsername(
+		const State &state,
+		const QRegularExpression &pattern,
+		const QString &text,
+		PeerId chat) {
+	if (text.isEmpty()) {
+		return false;
+	}
+	auto i = pattern.globalMatch(text);
+	while (i.hasNext()) {
+		if (IsFilteredUsername(state, i.next().captured(1), chat)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 [[nodiscard]] bool HasMention(
 		const State &state,
-		const TextWithEntities &text) {
-	if (!state.peers.empty()) {
-		for (const auto &entity : text.entities) {
-			if (entity.type() != EntityType::MentionName) {
-				continue;
-			}
+		const TextWithEntities &text,
+		PeerId chat) {
+	static const auto mention = QRegularExpression(
+		u"@([A-Za-z0-9_]{4,32})"_q);
+	// t.me/username, telegram.me/username, t.me/s/username.
+	static const auto link = QRegularExpression(
+		u"(?:t\\.me|telegram\\.me|telegram\\.dog)/(?:s/)?@?([A-Za-z0-9_]{4,32})"_q,
+		QRegularExpression::CaseInsensitiveOption);
+	for (const auto &entity : text.entities) {
+		if (entity.type() == EntityType::MentionName && !state.peers.empty()) {
 			const auto fields = TextUtilities::MentionNameDataToFields(
 				entity.data());
 			if (fields.userId
 				&& state.peers.contains(peerFromUser(UserId(fields.userId)))) {
 				return true;
 			}
+		} else if (entity.type() == EntityType::CustomUrl
+			&& !state.usernames.empty()
+			&& HasFilteredUsername(state, link, entity.data(), chat)) {
+			return true; // A hidden link: "мой канал" -> t.me/channel.
 		}
 	}
-	if (!state.usernames.empty() && text.text.contains('@')) {
-		static const auto mention = QRegularExpression(
-			u"@([A-Za-z0-9_]{4,32})"_q);
-		auto i = mention.globalMatch(text.text);
-		while (i.hasNext()) {
-			const auto match = i.next();
-			if (state.usernames.contains(match.captured(1).toLower())) {
-				return true;
-			}
-		}
+	if (state.usernames.empty()) {
+		return false;
 	}
-	return false;
+	return (text.text.contains('@')
+			&& HasFilteredUsername(state, mention, text.text, chat))
+		|| HasFilteredUsername(state, link, text.text, chat);
 }
 
 // Words and mentions of filtered people in the text, cached per message.
@@ -308,7 +365,7 @@ bool Insert(State &state, Rule rule) {
 	}
 	const auto hidden = (state.hasWords
 			&& Normalize(text.text).contains(state.words))
-		|| HasMention(state, text);
+		|| HasMention(state, text, item->history()->peer->id);
 	state.cache[id] = Cached{
 		.signature = signature,
 		.version = state.version,
@@ -481,9 +538,14 @@ ImportResult Import(const QByteArray &content) {
 	auto error = QJsonParseError();
 	const auto document = QJsonDocument::fromJson(content, &error);
 	if (error.error == QJsonParseError::NoError && document.isObject()) {
-		const auto rules = document.object().value(u"rules"_q).toArray();
+		const auto object = document.object();
+		const auto old = (object.value(u"format"_q).toInt(1) < kFormat);
+		const auto rules = object.value(u"rules"_q).toArray();
 		for (const auto value : rules) {
 			if (auto rule = RuleFromJson(value.toObject())) {
+				if (old) {
+					MigrateWholeWord(*rule);
+				}
 				if (Insert(state, std::move(*rule))) {
 					++result.added;
 				} else {
