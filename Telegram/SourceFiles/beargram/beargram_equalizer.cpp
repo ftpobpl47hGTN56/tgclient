@@ -18,6 +18,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
+#include "styles/style_background_preview_box.h" // localStorageLimitMargin
+#include "styles/style_edit_peer_members.h" // localStorageLimitSlider
 #include "styles/style_settings_local_storage.h"
 #include "styles/style_widgets.h"
 
