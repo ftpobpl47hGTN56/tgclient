@@ -137,6 +137,11 @@ void LoadBlocked(
 	return !item->repliesAreComments();
 }
 
+[[nodiscard]] bool IsOwnChannel(not_null<PeerData*> peer) {
+	const auto channel = peer->asBroadcast();
+	return channel && (channel->amCreator() || channel->hasAdminRights());
+}
+
 } // namespace
 
 bool IsFilteredOut(
@@ -146,6 +151,10 @@ bool IsFilteredOut(
 		|| (textItem && textItem != item && IsHiddenLocally(textItem))) {
 		return true;
 	} else if (item->out() || !item->isRegular()) {
+		return false;
+	} else if (IsOwnChannel(item->history()->peer)) {
+		// Posts there are the user's own content even when a bot or another
+		// admin published them (they are not out() then).
 		return false;
 	} else if (PostFilter::IsFilteredOut(item, textItem)) {
 		return true;
