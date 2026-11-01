@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_layers.h"
+#include "styles/style_media_player.h" // mediaPlayerTime
 #include "styles/style_settings.h"
 #include "styles/style_background_preview_box.h" // localStorageLimitMargin
 #include "styles/style_edit_peer_members.h" // localStorageLimitSlider
@@ -129,6 +130,23 @@ void Save(const State &state) {
 	return (gain > 0)
 		? (u"+"_q + QString::number(gain) + u" дБ"_q)
 		: (QString::number(gain) + u" дБ"_q);
+}
+
+// What each band changes, under its frequency.
+[[nodiscard]] const std::array<QString, kBands> &BandHints() {
+	static const auto result = std::array<QString, kBands>{
+		u"суббас"_q,
+		u"бас"_q,
+		u"удар"_q,
+		u"тепло"_q,
+		u"середина"_q,
+		u"голос"_q,
+		u"атака"_q,
+		u"чёткость"_q,
+		u"яркость"_q,
+		u"воздух"_q,
+	};
+	return result;
 }
 
 [[nodiscard]] QString PresetName(const Gains &gains) {
@@ -280,7 +298,9 @@ void Processor::process(QByteArray &pcm, int channels, int frequency) {
 
 void Box(not_null<Ui::GenericBox*> box) {
 	box->setTitle(rpl::single(u"Эквалайзер"_q));
-	box->setWidth(st::boxWideWidth);
+	box->setWidth(st::boxRowPadding.left()
+		+ style::ConvertScale(50 + 56 * kBands)
+		+ st::boxRowPadding.right());
 
 	const auto container = box->verticalLayout();
 
@@ -333,51 +353,100 @@ void Box(not_null<Ui::GenericBox*> box) {
 	});
 
 	Ui::AddSkip(container);
-	Ui::AddSubsectionTitle(container, rpl::single(u"Полосы"_q));
+
+	// Classic graphic equalizer: a vertical slider per band, side by side.
+	const auto columnWidth = style::ConvertScale(56);
+	const auto scaleWidth = style::ConvertScale(50);
+	const auto sliderHeight = style::ConvertScale(150);
+	const auto skip = style::ConvertScale(6);
+	const auto valueHeight = st::localStorageLimitValue.font->height;
+	const auto nameHeight = st::localStorageLimitLabel.font->height;
+	const auto hintHeight = st::mediaPlayerTime.font->height;
+	const auto sliderTop = valueHeight + skip;
+	const auto nameTop = sliderTop + sliderHeight + skip;
+	const auto hintTop = nameTop + nameHeight;
+	const auto panel = container->add(
+		object_ptr<Ui::FixedHeightWidget>(
+			container,
+			hintTop + hintHeight + skip),
+		QMargins(
+			st::boxRowPadding.left(),
+			0,
+			st::boxRowPadding.right(),
+			0));
+
+	// The dB scale on the left: +12, 0 and -12 at the slider marks.
+	const auto seek = st::localStorageLimitSlider.seekSize.height();
+	const auto scaleAt = [=](float64 value) {
+		return sliderTop
+			+ seek / 2
+			+ int(base::SafeRound((1. - value) * (sliderHeight - seek)));
+	};
+	for (const auto gain : { kMaxGain, 0, kMinGain }) {
+		const auto label = Ui::CreateChild<Ui::LabelSimple>(
+			panel,
+			st::mediaPlayerTime,
+			GainText(gain));
+		label->moveToLeft(
+			0,
+			scaleAt(SliderValue(gain)) - hintHeight / 2);
+	}
 
 	const auto &frequencies = Frequencies();
+	const auto &hints = BandHints();
 	for (auto i = 0; i != kBands; ++i) {
-		const auto row = container->add(
-			object_ptr<Ui::FixedHeightWidget>(
-				container,
-				st::localStorageLimitLabel.font->height),
-			st::localStorageLimitLabelMargin);
+		const auto value = Ui::CreateChild<Ui::LabelSimple>(
+			panel,
+			st::localStorageLimitValue,
+			GainText(state->gains[i]));
 		const auto name = Ui::CreateChild<Ui::LabelSimple>(
-			row,
+			panel,
 			st::localStorageLimitLabel,
 			FrequencyText(frequencies[i]));
-		const auto value = Ui::CreateChild<Ui::LabelSimple>(
-			row,
-			st::localStorageLimitValue);
-		value->setText(GainText(state->gains[i]));
-		rpl::combine(
-			row->widthValue(),
-			value->widthValue()
-		) | rpl::on_next([=](int width, int) {
-			name->moveToLeft(0, 0, width);
-			value->moveToRight(0, 0, width);
-		}, row->lifetime());
-
-		const auto slider = container->add(
-			object_ptr<Ui::MediaSlider>(
-				container,
-				st::localStorageLimitSlider),
-			st::localStorageLimitMargin);
-		slider->resize(st::localStorageLimitSlider.seekSize);
-		slider->setPseudoDiscrete(
-			kMaxGain - kMinGain + 1,
-			[=](int index) { return kMinGain + index; },
-			state->gains[i],
-			[=](int gain) { value->setText(GainText(gain)); },
-			[=](int gain) {
-				auto gains = state->gains;
-				gains[i] = gain;
-				state->gains = gains;
-				SetGains(gains);
-				state->presetName = PresetName(gains);
-			});
+		const auto hint = Ui::CreateChild<Ui::LabelSimple>(
+			panel,
+			st::mediaPlayerTime,
+			hints[i]);
+		const auto slider = Ui::CreateChild<Ui::MediaSlider>(
+			panel,
+			st::localStorageLimitSlider);
+		slider->setDirection(Ui::ContinuousSlider::Direction::Vertical);
+		slider->setAlwaysDisplayMarker(true);
+		slider->setValue(SliderValue(state->gains[i]));
+		const auto steps = kMaxGain - kMinGain;
+		const auto gainFor = [=](float64 progress) {
+			return kMinGain + int(base::SafeRound(progress * steps));
+		};
+		slider->setAdjustCallback([=](float64 progress) {
+			return base::SafeRound(progress * steps) / float64(steps);
+		});
+		slider->setChangeProgressCallback([=](float64 progress) {
+			value->setText(GainText(gainFor(progress)));
+		});
+		slider->setChangeFinishedCallback([=](float64 progress) {
+			auto gains = state->gains;
+			gains[i] = gainFor(progress);
+			state->gains = gains;
+			SetGains(gains);
+			state->presetName = PresetName(gains);
+		});
 		state->sliders.push_back(slider);
 		state->values.push_back(value);
+
+		// Centered in its column; labels change width with their text.
+		const auto center = [=](not_null<Ui::RpWidget*> widget, int top) {
+			const auto left = scaleWidth + i * columnWidth;
+			widget->moveToLeft(
+				left + (columnWidth - widget->width()) / 2,
+				top);
+		};
+		value->widthValue() | rpl::on_next([=] {
+			center(value, 0);
+		}, value->lifetime());
+		center(name, nameTop);
+		center(hint, hintTop);
+		slider->resize(seek, sliderHeight);
+		center(slider, sliderTop);
 	}
 
 	Ui::AddSkip(container);
