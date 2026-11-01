@@ -310,6 +310,32 @@ mediaPlayerPlayback: FilledSlider {
 	duration: 150;
 }
 
+// BearGram: a thicker progress line in the music player, the playlist
+// button (the list opens by click, not on hover) and the equalizer button.
+mediaPlayerPlaybackBearGram: FilledSlider(mediaPlayerPlayback) {
+	fullWidth: 9px;
+	lineWidth: 4px;
+}
+mediaPlayerPlaylistButton: IconButton(mediaPlayerRepeatButton) {
+	icon: icon {{ "menu/sound_select", menuIconFg }};
+	iconOver: icon {{ "menu/sound_select", menuIconFgOver }};
+	iconPosition: point(3px, 5px);
+	rippleAreaPosition: point(3px, 5px);
+	ripple: RippleAnimation(defaultRippleAnimation) {
+		color: windowBgOver;
+	}
+}
+mediaPlayerPlaylistActiveIcon: icon {{ "menu/sound_select", mediaPlayerActiveFg }};
+mediaPlayerEqualizerButton: IconButton(mediaPlayerPlaylistButton) {
+	icon: icon {{ "menu/manage", mediaPlayerActiveFg }};
+	iconOver: icon {{ "menu/manage", mediaPlayerActiveFg }};
+	ripple: RippleAnimation(defaultRippleAnimation) {
+		color: lightButtonBgOver;
+	}
+}
+mediaPlayerEqualizerOffIcon: icon {{ "menu/manage", menuIconFg }};
+mediaPlayerEqualizerOffIconOver: icon {{ "menu/manage", menuIconFgOver }};
+
 mediaPlayerPanelMarginLeft: 10px;
 mediaPlayerPanelMarginBottom: 10px;
 mediaPlayerPanelWidth: 344px;

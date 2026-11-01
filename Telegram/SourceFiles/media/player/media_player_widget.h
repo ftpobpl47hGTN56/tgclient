@@ -65,6 +65,13 @@ public:
 		return _togglePlaylistRequests.events();
 	}
 
+	// BearGram: the playlist opens by this button instead of on hover.
+	[[nodiscard]] auto playlistButtonClicks() const
+	-> rpl::producer<not_null<Ui::RpWidget*>> {
+		return _playlistButtonClicks.events();
+	}
+	void setPlaylistShown(bool shown);
+
 private:
 	void resizeEvent(QResizeEvent *e) override;
 	void paintEvent(QPaintEvent *e) override;
@@ -139,6 +146,7 @@ private:
 	bool _labelsOver = false;
 	bool _labelsDown = false;
 	rpl::event_stream<bool> _togglePlaylistRequests;
+	rpl::event_stream<not_null<Ui::RpWidget*>> _playlistButtonClicks;
 	bool _narrow = false;
 	bool _over = false;
 	bool _wontBeOver = false;
@@ -153,6 +161,8 @@ private:
 	object_ptr<Ui::IconButton> _volumeToggle;
 	object_ptr<Ui::IconButton> _repeatToggle;
 	object_ptr<Ui::IconButton> _orderToggle;
+	object_ptr<Ui::IconButton> _playlistToggle; // BearGram
+	object_ptr<Ui::IconButton> _equalizerToggle; // BearGram
 	object_ptr<SpeedButton> _speedToggle;
 	object_ptr<Ui::IconButton> _close;
 	object_ptr<Ui::PlainShadow> _shadow = { nullptr };

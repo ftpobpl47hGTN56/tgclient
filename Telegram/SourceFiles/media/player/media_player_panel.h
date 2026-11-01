@@ -39,6 +39,11 @@ public:
 	void showFromOther();
 	void hideFromOther();
 
+	// BearGram: the playlist opens and closes by the player button and
+	// stays open until that button, a click outside or Escape.
+	void toggleFromButton(not_null<QWidget*> button);
+	[[nodiscard]] rpl::producer<bool> shownByButtonValue() const;
+
 	int bestPositionFor(int left) const;
 
 protected:
@@ -98,6 +103,12 @@ private:
 	Ui::Animations::Simple _a_appearance;
 
 	bool _ignoringEnterEvents = false;
+
+	void setShownByButton(bool shown);
+	void watchOutsideClicks();
+	rpl::variable<bool> _shownByButton = false;
+	QPointer<QWidget> _toggleButton;
+	rpl::lifetime _outsideClicksLifetime;
 
 	base::Timer _showTimer;
 	base::Timer _hideTimer;

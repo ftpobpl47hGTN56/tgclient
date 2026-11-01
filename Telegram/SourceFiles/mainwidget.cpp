@@ -1000,6 +1000,24 @@ void MainWidget::createPlayer() {
 			_playerPlaylist->showFromOther();
 		}, _player->lifetime());
 
+		// BearGram: the playlist button opens and closes the list.
+		_player->entity()->playlistButtonClicks(
+		) | rpl::on_next([=](not_null<Ui::RpWidget*> button) {
+			if (_playerPlaylist->isHidden()) {
+				const auto center = button->mapToGlobal(
+					QPoint(button->width() / 2, button->height() / 2));
+				auto position = mapFromGlobal(center).x();
+				auto bestPosition = _playerPlaylist->bestPositionFor(position);
+				if (rtl()) bestPosition = position + 2 * (position - bestPosition) - _playerPlaylist->width();
+				updateMediaPlaylistPosition(bestPosition);
+			}
+			_playerPlaylist->toggleFromButton(button);
+		}, _player->lifetime());
+		_playerPlaylist->shownByButtonValue(
+		) | rpl::on_next([=](bool shown) {
+			_player->entity()->setPlaylistShown(shown);
+		}, _player->lifetime());
+
 		orderWidgets();
 		if (_showAnimation) {
 			_player->show(anim::type::instant);

@@ -64,6 +64,16 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   and "Читать полностью" shows it (`history_view_document.cpp`).
 - "Выделить всё" in the selection bar of a chat selects the loaded messages
   from the newest up to 100 (`HistoryInner::selectAllLoaded`).
+- Up to 100 favorite stickers: the server keeps 5 (10 with Premium), the
+  local set keeps the rest and server lists are merged into it
+  (`Data::Stickers::specialSetReceived`, `kBearGramFavedLimit`).
+- Music equalizer (`beargram_equalizer`): 10 bands with presets for the
+  music player only, own peaking filters on the PCM before OpenAL
+  (`Media::Player::Loaders::loadData`), settings in
+  `tdata/beargram_equalizer.json`. Opened by a button in the player.
+- Music player: the playlist opens by its button instead of on hover and
+  stays open until the button, a click outside or Escape; a thicker
+  progress line (`media_player_widget.cpp`, `media_player_panel.cpp`).
 
 ## Configure (Windows, x64)
 
@@ -105,6 +115,9 @@ exist in both. After a Telegram update, check this list first.
 | Local names | `data_user.cpp`, `data_peer.cpp` | | |
 | Sponsored messages | `sponsored_messages.cpp` | | |
 | Update bar in the chats list | `dialogs_widget.cpp` | | |
+| Favorite stickers limit | `data_stickers.cpp`, `api_toggling_media.cpp` | | |
+| Music equalizer | `media_audio_loaders.cpp` | | |
+| Player buttons, playlist by click, progress line | `media_player_widget.cpp`, `media_player_panel.cpp`, `mainwidget.cpp`, `media_player.style` | | |
 | Accounts limit, account transfer | `main_domain.cpp`, `intro_start.cpp` | | |
 | Name, icon, app id | `version.h`, `Telegram.rc`, `windows_app_user_model_id.cpp`, `CMakeLists.txt` | | |
 

@@ -36,6 +36,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_account.h"
 #include "main/main_session.h"
 #include "window/window_session_controller.h"
+#include "beargram/beargram_equalizer.h"
+#include "ui/layers/generic_box.h"
 #include "styles/style_media_player.h"
 
 namespace Media {
@@ -55,10 +57,12 @@ Widget::Widget(
 , _volumeToggle(rightControls(), st::mediaPlayerVolumeToggle)
 , _repeatToggle(rightControls(), st::mediaPlayerRepeatButton)
 , _orderToggle(rightControls(), st::mediaPlayerOrderButton)
+, _playlistToggle(rightControls(), st::mediaPlayerPlaylistButton)
+, _equalizerToggle(rightControls(), st::mediaPlayerEqualizerButton)
 , _speedToggle(rightControls(), st::mediaPlayerSpeedButton)
 , _close(this, st::mediaPlayerClose)
 , _shadow(this)
-, _playbackSlider(this, st::mediaPlayerPlayback)
+, _playbackSlider(this, st::mediaPlayerPlaybackBearGram)
 , _volume(std::in_place, dropdownsParent.get())
 , _playbackProgress(std::make_unique<View::PlaybackProgress>())
 , _orderController(
@@ -98,6 +102,23 @@ Widget::Widget(
 	_volumeToggle->setAccessibleName(tr::lng_ringtones_box_volume(tr::now));
 	_repeatToggle->setAccessibleName(tr::lng_schedule_repeat_label(tr::now));
 	_orderToggle->setAccessibleName(tr::lng_sr_playback_order(tr::now));
+
+	// BearGram: the playlist button and the music equalizer.
+	_playlistToggle->setAccessibleName(u"Плейлист"_q);
+	_playlistToggle->setClickedCallback([=] {
+		_playlistButtonClicks.fire(not_null<Ui::RpWidget*>(
+			_playlistToggle.data()));
+	});
+	_equalizerToggle->setAccessibleName(u"Эквалайзер"_q);
+	_equalizerToggle->setClickedCallback([=] {
+		_controller->show(Box(BearGram::Equalizer::Box));
+	});
+	BearGram::Equalizer::EnabledValue(
+	) | rpl::on_next([=](bool enabled) {
+		_equalizerToggle->setIconOverride(
+			enabled ? nullptr : &st::mediaPlayerEqualizerOffIcon,
+			enabled ? nullptr : &st::mediaPlayerEqualizerOffIconOver);
+	}, _equalizerToggle->lifetime());
 	_close->setAccessibleName(tr::lng_sr_player_close(tr::now));
 
 	_nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -222,6 +243,8 @@ Widget::Widget(
 
 	hideDropdownsOn(_volumeToggle);
 	hideDropdownsOn(_orderToggle);
+	hideDropdownsOn(_playlistToggle);
+	hideDropdownsOn(_equalizerToggle);
 	hideDropdownsOn(_speedToggle);
 
 	const auto otherDropdownCheck = [=](QPoint globalPosition) {
@@ -423,6 +446,10 @@ void Widget::updateControlsGeometry() {
 	if (_type == AudioMsgId::Type::Song) {
 		_repeatToggle->moveToRight(right, 0); right += _repeatToggle->width();
 		_orderToggle->moveToRight(right, 0); right += _orderToggle->width();
+		_equalizerToggle->moveToRight(right, 0);
+		right += _equalizerToggle->width();
+		_playlistToggle->moveToRight(right, 0);
+		right += _playlistToggle->width();
 	}
 	_volumeToggle->moveToRight(right, 0); right += _volumeToggle->width();
 
@@ -432,9 +459,9 @@ void Widget::updateControlsGeometry() {
 
 	_playbackSlider->setGeometry(
 		0,
-		height() - st::mediaPlayerPlayback.fullWidth,
+		height() - st::mediaPlayerPlaybackBearGram.fullWidth,
 		width(),
-		st::mediaPlayerPlayback.fullWidth);
+		st::mediaPlayerPlaybackBearGram.fullWidth);
 
 	updateDropdownsGeometry();
 }
@@ -547,7 +574,7 @@ void Widget::updateOverLabelsState(QPoint pos) {
 		- _rightControls->x()
 		- _rightControls->width()
 		+ getTimeRight();
-	const auto labels = myrtlrect(left, 0, width() - right - left, height() - st::mediaPlayerPlayback.fullWidth);
+	const auto labels = myrtlrect(left, 0, width() - right - left, height() - st::mediaPlayerPlaybackBearGram.fullWidth);
 	const auto over = labels.contains(pos);
 	updateOverLabelsState(over);
 }
@@ -558,7 +585,13 @@ void Widget::updateOverLabelsState(bool over) {
 		&& ((_type == AudioMsgId::Type::Voice)
 			|| _lastSongFromAnotherSession);
 	setCursor(pressShowsItem ? style::cur_pointer : style::cur_default);
-	_togglePlaylistRequests.fire(over && (_type == AudioMsgId::Type::Song));
+	// BearGram: the playlist is opened by its button, not on hover.
+}
+
+void Widget::setPlaylistShown(bool shown) {
+	_playlistToggle->setIconOverride(
+		shown ? &st::mediaPlayerPlaylistActiveIcon : nullptr,
+		shown ? &st::mediaPlayerPlaylistActiveIcon : nullptr);
 }
 
 void Widget::updatePlayPrevNextPositions() {
@@ -594,7 +627,9 @@ int Widget::getTimeRight() const {
 	result += _volumeToggle->width();
 	if (_type == AudioMsgId::Type::Song) {
 		result += _repeatToggle->width()
-			+ _orderToggle->width();
+			+ _orderToggle->width()
+			+ _playlistToggle->width()
+			+ _equalizerToggle->width();
 	}
 	if (hasPlaybackSpeedControl()) {
 		result += _speedToggle->width();
@@ -659,6 +694,8 @@ bool Widget::hasPlaybackSpeedControl() const {
 void Widget::updateControlsVisibility() {
 	_repeatToggle->setVisible(_type == AudioMsgId::Type::Song);
 	_orderToggle->setVisible(_type == AudioMsgId::Type::Song);
+	_playlistToggle->setVisible(_type == AudioMsgId::Type::Song);
+	_equalizerToggle->setVisible(_type == AudioMsgId::Type::Song);
 	_speedToggle->setVisible(hasPlaybackSpeedControl());
 	if (!_shadow->isHidden()) {
 		_playbackSlider->setVisible(_type == AudioMsgId::Type::Song);

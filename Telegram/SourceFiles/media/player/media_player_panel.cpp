@@ -21,6 +21,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/scroll_area.h"
 #include "ui/cached_round_corners.h"
 #include "ui/ui_utility.h"
+#include "base/event_filter.h"
+#include "base/invoke_queued.h"
 #include "mainwindow.h"
 #include "main/main_session.h"
 #include "styles/style_overview.h"
@@ -86,10 +88,87 @@ int Panel::emptyInnerHeight() const {
 }
 
 bool Panel::preventAutoHide() const {
+	if (_shownByButton.current()) {
+		return true; // BearGram: closed only by the button or a click.
+	}
 	if (const auto list = static_cast<ListWidget*>(_scroll->widget())) {
 		return list->preventAutoHide();
 	}
 	return false;
+}
+
+void Panel::toggleFromButton(not_null<QWidget*> button) {
+	_toggleButton = button.get();
+	if (!isHidden() && !_hiding) {
+		setShownByButton(false);
+		_showTimer.cancel();
+		startHide();
+		return;
+	}
+	_hideTimer.cancel();
+	_ignoringEnterEvents = false;
+	setShownByButton(true);
+	startShow();
+	if (isHidden()) {
+		setShownByButton(false); // The list is too small to show.
+	}
+}
+
+rpl::producer<bool> Panel::shownByButtonValue() const {
+	return _shownByButton.value();
+}
+
+void Panel::setShownByButton(bool shown) {
+	if (_shownByButton.current() == shown) {
+		return;
+	}
+	_shownByButton = shown;
+	if (shown) {
+		watchOutsideClicks();
+	} else {
+		_outsideClicksLifetime.destroy();
+	}
+}
+
+void Panel::watchOutsideClicks() {
+	// Hiding destroys the filter, so not from inside its callback.
+	const auto hideLater = [=] {
+		InvokeQueued(this, [=] {
+			if (_shownByButton.current() && !isHidden() && !_hiding) {
+				setShownByButton(false);
+				startHide();
+			}
+		});
+	};
+	// The application wide filter lives while the list is open by button.
+	base::install_event_filter(qApp, [=](not_null<QEvent*> e) {
+		const auto type = e->type();
+		if (type == QEvent::KeyPress) {
+			const auto key = static_cast<QKeyEvent*>(e.get())->key();
+			if (key == Qt::Key_Escape && !isHidden() && !_hiding) {
+				hideLater();
+			}
+			return base::EventFilterResult::Continue;
+		} else if (type != QEvent::MouseButtonPress || isHidden()) {
+			return base::EventFilterResult::Continue;
+		}
+		const auto global = static_cast<QMouseEvent*>(e.get())->globalPos();
+		const auto inside = [&](QWidget *widget) {
+			return widget
+				&& widget->isVisible()
+				&& widget->rect().contains(widget->mapFromGlobal(global));
+		};
+		if (inside(this) || inside(_toggleButton.data())) {
+			return base::EventFilterResult::Continue;
+		}
+		if (const auto list = static_cast<ListWidget*>(_scroll->widget())) {
+			if (list->preventAutoHide()) {
+				return base::EventFilterResult::Continue; // A context menu.
+			}
+		}
+		hideLater();
+		return base::EventFilterResult::Continue;
+	}, _outsideClicksLifetime);
 }
 
 void Panel::updateControlsGeometry() {
@@ -409,6 +488,7 @@ void Panel::startShow() {
 }
 
 void Panel::hideIgnoringEnterEvents() {
+	setShownByButton(false);
 	_ignoringEnterEvents = true;
 	if (isHidden()) {
 		hideFinished();
@@ -456,6 +536,7 @@ void Panel::appearanceCallback() {
 }
 
 void Panel::hideFinished() {
+	setShownByButton(false);
 	hide();
 	_cache = QPixmap();
 	performDestroy();

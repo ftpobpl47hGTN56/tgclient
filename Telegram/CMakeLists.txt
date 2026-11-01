@@ -250,6 +250,8 @@ PRIVATE
     beargram/beargram_account_transfer.h
     beargram/beargram_deleted_log.cpp
     beargram/beargram_deleted_log.h
+    beargram/beargram_equalizer.cpp
+    beargram/beargram_equalizer.h
     beargram/beargram_filters.cpp
     beargram/beargram_filters.h
     beargram/beargram_local_hide.cpp

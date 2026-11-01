@@ -11,9 +11,33 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "media/audio/media_audio_ffmpeg_loader.h"
 #include "media/audio/media_child_ffmpeg_loader.h"
 #include "media/media_common.h"
+#include "beargram/beargram_equalizer.h"
 
 namespace Media {
 namespace Player {
+namespace {
+
+// BearGram: the equalizer for music, used on the loaders thread only.
+[[nodiscard]] BearGram::Equalizer::Processor &SongEqualizer() {
+	static auto result = BearGram::Equalizer::Processor();
+	return result;
+}
+
+[[nodiscard]] int EqualizerChannels(int format) {
+	switch (format) {
+	case AL_FORMAT_MONO16: return 1;
+	case AL_FORMAT_STEREO16: return 2;
+	}
+	return 0; // 8 bit audio is left as is.
+}
+
+void ApplySongEqualizer(QByteArray &pcm, int format, int frequency) {
+	if (const auto channels = EqualizerChannels(format)) {
+		SongEqualizer().process(pcm, channels, frequency);
+	}
+}
+
+} // namespace
 
 Loaders::Loaders(QThread *thread)
 : _fromExternalNotify([=] { videoSoundAdded(); }) {
@@ -257,6 +281,13 @@ void Loaders::loadData(AudioMsgId audio, crl::time positionMs) {
 		track->withSpeed.bufferedPosition = track->withSpeed.position;
 		track->withSpeed.fadeStartPosition = track->withSpeed.position;
 	} else if (updatedWithSpeed) {
+		if (type == AudioMsgId::Type::Song) {
+			// BearGram: the buffers were decoded again from the start.
+			SongEqualizer().reset();
+			for (auto &buffer : updatedWithSpeed->buffered) {
+				ApplySongEqualizer(buffer, l->format(), l->samplesFrequency());
+			}
+		}
 		auto old = Mixer::Track();
 		old.stream = base::take(track->stream);
 		old.withSpeed = std::exchange(track->withSpeed, *updatedWithSpeed);
@@ -283,6 +314,16 @@ void Loaders::loadData(AudioMsgId audio, crl::time positionMs) {
 			l->setForceToBuffer(false);
 		}
 		track->waitingForBuffer = false;
+
+		if (type == AudioMsgId::Type::Song) {
+			if (started) {
+				SongEqualizer().reset();
+			}
+			ApplySongEqualizer(
+				accumulated,
+				track->format,
+				track->state.frequency);
+		}
 
 		track->withSpeed.buffered[bufferIndex] = accumulated;
 		track->withSpeed.samples[bufferIndex] = accumulatedCount;
