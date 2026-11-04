@@ -8,6 +8,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_transcribes.h"
 #include "apiwrap.h"
+#include "core/application.h"
+#include "data/data_session.h"
+#include "iv/iv_instance.h"
+#include "window/window_session_controller.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
@@ -30,7 +34,26 @@ constexpr auto kMinLength = 300;
 void AddReadFullAction(
 		not_null<Ui::PopupMenu*> menu,
 		not_null<HistoryItem*> item,
-		std::shared_ptr<Ui::Show> show) {
+		not_null<Window::SessionController*> controller) {
+	if (item->richPage()) {
+		// The text of a rich message has its pictures as small icons only.
+		if (item->originalText().text.size() < kMinLength) {
+			return;
+		}
+		const auto weak = base::make_weak(controller);
+		const auto fullId = item->fullId();
+		menu->addAction(u"Читать полностью"_q, [=] {
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
+			} else if (const auto found = strong->session().data().message(
+					fullId)) {
+				Core::App().iv().showRichMessage(strong, found);
+			}
+		}, &st::menuIconFile);
+		return;
+	}
+	const auto show = controller->uiShow();
 	auto copy = item->originalText();
 	// The speech text of a voice or round message, when it is shown.
 	const auto &transcribe = item->history()->session().api().transcribes(
@@ -42,7 +65,7 @@ void AddReadFullAction(
 		}
 		copy = std::move(speech);
 	}
-	if (!show || copy.text.size() < kMinLength) {
+	if (copy.text.size() < kMinLength) {
 		return;
 	}
 	menu->addAction(u"Читать полностью"_q, [=] {

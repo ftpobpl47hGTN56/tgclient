@@ -161,7 +161,9 @@ ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item) {
 			expanded.emplace(id);
 		}
 		if (const auto found = session->data().message(id)) {
-			session->data().requestItemResize(found);
+			// A new view: a resize alone left rich messages blank until
+			// the chat was opened again.
+			session->data().requestItemViewRefresh(found);
 		}
 	});
 	links.emplace(id, result);

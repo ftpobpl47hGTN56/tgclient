@@ -10,15 +10,20 @@ class HistoryItem;
 
 namespace Ui {
 class PopupMenu;
-class Show;
 } // namespace Ui
+
+namespace Window {
+class SessionController;
+} // namespace Window
 
 namespace BearGram {
 
 // "Читать полностью": the text of a long message in a separate window.
+// A rich message (headings, lists, pictures) opens in the Instant View
+// window, where its pictures are shown too.
 void AddReadFullAction(
 	not_null<Ui::PopupMenu*> menu,
 	not_null<HistoryItem*> item,
-	std::shared_ptr<Ui::Show> show);
+	not_null<Window::SessionController*> controller);
 
 } // namespace BearGram

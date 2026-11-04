@@ -3581,7 +3581,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				BearGram::AddReadFullAction(
 					_menu.get(),
 					item,
-					_controller->uiShow());
+					_controller);
 				BearGram::AddEditHistoryAction(
 					_menu.get(),
 					item,
@@ -3913,7 +3913,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				BearGram::AddReadFullAction(
 					_menu.get(),
 					item,
-					_controller->uiShow());
+					_controller);
 				BearGram::AddEditHistoryAction(
 					_menu.get(),
 					item,

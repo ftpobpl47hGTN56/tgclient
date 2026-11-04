@@ -1965,7 +1965,7 @@ void FillContextMenuItems(
 		BearGram::AddReadFullAction(
 			result,
 			item,
-			list->controller()->uiShow());
+			list->controller());
 		BearGram::AddEditHistoryAction(
 			result,
 			item,
