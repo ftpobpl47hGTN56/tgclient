@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_deleted_log.h"
 
 #include "api/api_text_entities.h"
+#include "base/timer.h"
 #include "base/unixtime.h"
 #include "beargram/beargram_settings.h"
 #include "core/application.h"
@@ -29,6 +30,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -259,7 +261,7 @@ void Load(State &state) {
 	return state;
 }
 
-void Save() {
+void WriteLog() {
 	const auto &state = Instance();
 	auto selected = QJsonArray();
 	for (const auto &key : state.selected) {
@@ -290,7 +292,7 @@ void Save() {
 	}
 }
 
-void SaveDeleted() {
+void WriteDeleted() {
 	const auto &state = Instance();
 	auto peers = QJsonObject();
 	for (const auto &[peerKey, messages] : state.deleted) {
@@ -314,6 +316,60 @@ void SaveDeleted() {
 	auto file = QFile(DeletedPath());
 	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
 		file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+	}
+}
+
+// Both files are written as a whole, which takes long with many saved
+// messages. Writing them on every deleted message or edit froze big chats
+// (a mass deletion wrote the file hundreds of times), so the writes are
+// joined and done once after a short delay, and before the app quits.
+constexpr auto kWriteDelay = crl::time(1500);
+
+struct PendingWrites {
+	bool log = false;
+	bool deleted = false;
+	base::Timer timer;
+};
+
+void FlushWrites();
+
+[[nodiscard]] PendingWrites &Pending() {
+	static const auto result = [] {
+		const auto pending = new PendingWrites();
+		pending->timer.setCallback(FlushWrites);
+		QObject::connect(
+			QCoreApplication::instance(),
+			&QCoreApplication::aboutToQuit,
+			FlushWrites);
+		return pending;
+	}();
+	return *result;
+}
+
+void FlushWrites() {
+	auto &pending = Pending();
+	pending.timer.cancel();
+	if (base::take(pending.log)) {
+		WriteLog();
+	}
+	if (base::take(pending.deleted)) {
+		WriteDeleted();
+	}
+}
+
+void Save() {
+	auto &pending = Pending();
+	pending.log = true;
+	if (!pending.timer.isActive()) {
+		pending.timer.callOnce(kWriteDelay);
+	}
+}
+
+void SaveDeleted() {
+	auto &pending = Pending();
+	pending.deleted = true;
+	if (!pending.timer.isActive()) {
+		pending.timer.callOnce(kWriteDelay);
 	}
 }
 
@@ -587,6 +643,7 @@ void ClearAll() {
 	state.deleted.clear();
 	Save();
 	SaveDeleted();
+	FlushWrites();
 	for (const auto &[index, account] : Core::App().domain().accounts()) {
 		if (!account->sessionExists()) {
 			continue;
