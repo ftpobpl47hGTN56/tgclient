@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_transcribes.h"
 #include "apiwrap.h"
+#include "base/call_delayed.h"
 #include "core/application.h"
 #include "data/data_session.h"
 #include "iv/iv_instance.h"
@@ -29,6 +30,9 @@ namespace {
 // Shorter texts are easy to read in the bubble.
 constexpr auto kMinLength = 300;
 
+// See AddReadFullAction, the menu closes first.
+constexpr auto kOpenDelay = crl::time(200);
+
 } // namespace
 
 void AddReadFullAction(
@@ -43,13 +47,18 @@ void AddReadFullAction(
 		const auto weak = base::make_weak(controller);
 		const auto fullId = item->fullId();
 		menu->addAction(u"Читать полностью"_q, [=] {
-			const auto strong = weak.get();
-			if (!strong) {
-				return;
-			} else if (const auto found = strong->session().data().message(
-					fullId)) {
-				Core::App().iv().showRichMessage(strong, found);
-			}
+			// Opened right from the menu the window went under the main
+			// one: closing the menu gives the focus back to the chat.
+			// So it opens a moment later, when the menu is gone.
+			base::call_delayed(kOpenDelay, [=] {
+				const auto strong = weak.get();
+				if (!strong) {
+					return;
+				} else if (const auto found
+						= strong->session().data().message(fullId)) {
+					Core::App().iv().showRichMessage(strong, found);
+				}
+			});
 		}, &st::menuIconFile);
 		return;
 	}
