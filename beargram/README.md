@@ -71,6 +71,10 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   music player only, own peaking filters on the PCM before OpenAL
   (`Media::Player::Loaders::loadData`), settings in
   `tdata/beargram_equalizer.json`. Opened by a button in the player.
+- ID and account age in profiles (`beargram_peer_info`): the registration
+  month of a user estimated from its id by known (id, date) points, the exact
+  creation date of a channel or supergroup from its message 1
+  (`info_profile_actions.cpp`).
 - Music player: the playlist opens by its button instead of on hover and
   stays open until the button, a click outside or Escape; a thicker
   progress line (`media_player_widget.cpp`, `media_player_panel.cpp`).

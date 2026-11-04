@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/profile/info_profile_actions.h"
 
+#include "beargram/beargram_peer_info.h"
+
 #include "api/api_blocked_peers.h"
 #include "api/api_chat_participants.h"
 #include "api/api_credits.h"
@@ -1896,6 +1898,36 @@ Section DetailsFiller::makeInfo() {
 		if (!_topic) {
 			setupAboutContextMenu(about.text, AboutWithAdvancedValue(_peer));
 			SetupAboutPeerIdDrag(about.text, _peer);
+		}
+	}
+	// BearGram: the ID and, under it, the account or channel age.
+	if (!_topic) {
+		const auto user = _peer->asUser();
+		const auto channel = _peer->asChannel();
+		const auto bare = uint64(_peer->id.value & PeerId::kChatTypeMask);
+		const auto id = QString::number(bare);
+		addInfoOneLine(
+			rpl::single(u"ID"_q),
+			rpl::single(TextWithEntities{ id }),
+			id);
+		if (user) {
+			const auto text = BearGram::PeerInfo::EstimatedRegistrationText(
+				bare);
+			addInfoOneLine(
+				rpl::single(u"Дата регистрации"_q),
+				rpl::single(TextWithEntities{ text }),
+				text);
+		} else if (channel) {
+			addInfoOneLine(
+				rpl::single(channel->isMegagroup()
+					? u"Группа создана"_q
+					: u"Канал создан"_q),
+				BearGram::PeerInfo::ChannelCreatedValue(
+					channel
+				) | rpl::map([](const QString &text) {
+					return TextWithEntities{ text };
+				}),
+				QString());
 		}
 	}
 	raw->toggleOn(tracker.atLeastOneShownValue());
