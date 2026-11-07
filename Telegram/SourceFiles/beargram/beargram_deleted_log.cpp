@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/view/history_view_element.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -75,6 +76,10 @@ struct State {
 	// Raw messages of logged chats received in this session. Memory only.
 	std::map<RawKey, QByteArray> raw;
 	std::deque<RawKey> rawOrder;
+
+	// (self, msg) -> peer for chats with common message ids (users and
+	// basic groups): their deletions come with ids only.
+	std::map<std::pair<uint64, int64>, uint64> rawPeers;
 };
 
 [[nodiscard]] QString LogPath() {
@@ -467,9 +472,120 @@ void RememberRaw(not_null<PeerData*> peer, const MTPMessage &message) {
 	}
 	state.raw.emplace(key, SerializeMessage(message));
 	state.rawOrder.push_back(key);
+	if (!peerIsChannel(peer->id)) {
+		state.rawPeers[{ std::get<0>(key), std::get<2>(key) }]
+			= std::get<1>(key);
+	}
 	while (state.rawOrder.size() > kRawCacheLimit) {
-		state.raw.erase(state.rawOrder.front());
+		const auto &old = state.rawOrder.front();
+		const auto i = state.rawPeers.find({
+			std::get<0>(old),
+			std::get<2>(old),
+		});
+		if (i != end(state.rawPeers) && i->second == std::get<1>(old)) {
+			state.rawPeers.erase(i);
+		}
+		state.raw.erase(old);
 		state.rawOrder.pop_front();
+	}
+}
+
+void KeepDeletedById(
+		not_null<Main::Session*> session,
+		PeerId peerId,
+		MsgId id) {
+	auto &state = Instance();
+	if (state.raw.empty()) {
+		return;
+	}
+	const auto self = uint64(session->userId().bare);
+	if (!peerId) {
+		const auto i = state.rawPeers.find({ self, int64(id.bare) });
+		if (i == end(state.rawPeers)) {
+			return;
+		}
+		peerId = PeerId(i->second);
+	}
+	const auto peer = session->data().peerLoaded(peerId);
+	if (!peer || !IsTracked(peer)) {
+		return;
+	}
+	const auto i = state.raw.find(MakeRawKey(peer, id));
+	if (i == end(state.raw)) {
+		return;
+	}
+	auto &list = state.deleted[PeerKey(peer)];
+	if (list.contains(int64(id.bare))) {
+		return;
+	}
+	list[int64(id.bare)] = DeletedEntry{
+		.deletedAt = base::unixtime::now(),
+		.layer = int(MTP::details::kCurrentLayer),
+		.raw = i->second,
+	};
+	state.kept.emplace(PeerKey(peer) + ':' + QString::number(id.bare));
+	SaveDeleted();
+}
+
+void KeepHistory(not_null<History*> history) {
+	const auto peer = history->peer;
+	if (!IsTracked(peer)) {
+		return;
+	}
+	auto &state = Instance();
+	const auto peerKey = PeerKey(peer);
+	auto &list = state.deleted[peerKey];
+	const auto now = base::unixtime::now();
+	const auto layer = int(MTP::details::kCurrentLayer);
+	auto changed = false;
+
+	// The messages on screen and around it.
+	for (const auto &block : history->blocks) {
+		for (const auto &view : block->messages) {
+			const auto item = view->data();
+			const auto id = int64(item->id.bare);
+			if (!item->isRegular() || list.contains(id)) {
+				continue;
+			}
+			const auto i = state.raw.find(MakeRawKey(peer, item->id));
+			list[id] = DeletedEntry{
+				.deletedAt = now,
+				.layer = layer,
+				.raw = (i != end(state.raw))
+					? i->second
+					: SerializeMessage(BuildFallbackMessage(item)),
+			};
+			state.kept.emplace(peerKey + ':' + QString::number(id));
+			changed = true;
+		}
+	}
+
+	// The messages received earlier in this session, already unloaded.
+	const auto self = uint64(peer->session().userId().bare);
+	const auto bare = uint64(peer->id.value);
+	for (auto i = state.raw.lower_bound(
+			RawKey{ self, bare, std::numeric_limits<int64>::min() })
+		; i != end(state.raw)
+			&& std::get<0>(i->first) == self
+			&& std::get<1>(i->first) == bare
+		; ++i) {
+		const auto id = std::get<2>(i->first);
+		if (list.contains(id)) {
+			continue;
+		}
+		list[id] = DeletedEntry{
+			.deletedAt = now,
+			.layer = layer,
+			.raw = i->second,
+		};
+		state.kept.emplace(peerKey + ':' + QString::number(id));
+		changed = true;
+	}
+	if (list.empty()) {
+		state.deleted.erase(peerKey);
+	}
+	if (changed) {
+		SaveDeleted();
 	}
 }
 

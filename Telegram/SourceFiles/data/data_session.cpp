@@ -3355,8 +3355,12 @@ void Session::processMessagesDeleted(
 			const auto history = i->second->history();
 			toDestroy.push_back(i->second);
 			historiesToCheck.emplace(history);
-		} else if (affected) {
-			affected->unknownMessageDeleted(messageId.v);
+		} else {
+			// BearGram: a deleted message that is not loaded right now.
+			BearGram::KeepDeletedById(&session(), peerId, messageId.v);
+			if (affected) {
+				affected->unknownMessageDeleted(messageId.v);
+			}
 		}
 	}
 	// BearGram: the deleted messages logger keeps items of tracked chats.
@@ -3384,6 +3388,10 @@ void Session::processNonChannelMessagesDeleted(const QVector<MTPint> &data) {
 			const auto history = item->history();
 			toDestroy.push_back(item);
 			historiesToCheck.emplace(history);
+		} else {
+			// BearGram: a deleted message that is not loaded right now
+			// (the other side deleted the whole chat, for example).
+			BearGram::KeepDeletedById(&session(), PeerId(), messageId.v);
 		}
 	}
 	// BearGram: the deleted messages logger keeps items of tracked chats.

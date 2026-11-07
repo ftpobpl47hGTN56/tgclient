@@ -2285,6 +2285,11 @@ void ApiWrap::deleteHistory(
 			justClear,
 			revoke);
 	}
+	// BearGram: messages of a logged chat stay as deleted after the chat
+	// is deleted or cleared, they are removed only by hand in settings.
+	if (history) {
+		BearGram::KeepHistory(history);
+	}
 	if (!justClear) {
 		_session->data().deleteConversationLocally(peer);
 	} else if (history) {

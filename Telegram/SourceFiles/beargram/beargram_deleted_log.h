@@ -10,6 +10,10 @@ class History;
 class HistoryItem;
 class PeerData;
 
+namespace Main {
+class Session;
+} // namespace Main
+
 namespace Ui {
 class PopupMenu;
 class Show;
@@ -45,6 +49,20 @@ bool ToggleTracked(not_null<PeerData*> peer);
 // Returns true if the item is kept (then it must not be destroyed).
 bool KeepDeleted(not_null<HistoryItem*> item);
 [[nodiscard]] bool IsKeptDeleted(not_null<const HistoryItem*> item);
+
+// A deleted message that is not loaded (the history was unloaded or the
+// chat is closed): its copy from the raw cache of this session is saved.
+// peerId is empty for users and basic groups, their ids are common.
+void KeepDeletedById(
+	not_null<Main::Session*> session,
+	PeerId peerId,
+	MsgId id);
+
+// The chat is deleted or cleared (by the user here): every message of it
+// that is loaded or was received in this session is saved as deleted, so
+// it stays in the chat with the "удалено" mark. Removed only by hand, in
+// the BearGram settings.
+void KeepHistory(not_null<History*> history);
 
 // Call before an edit from the server is applied.
 void RecordEdit(not_null<HistoryItem*> item, const QString &newText);
