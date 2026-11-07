@@ -527,6 +527,16 @@ void KeepDeletedById(
 	SaveDeleted();
 }
 
+void RestoreKept(not_null<History*> history) {
+	auto slice = QVector<MTPMessage>();
+	// InjectDeleted puts every kept message into an empty slice of a chat
+	// that has nothing on the server.
+	InjectDeleted(history, slice, true);
+	if (!slice.isEmpty()) {
+		history->addOlderSlice(slice);
+	}
+}
+
 void KeepHistory(not_null<History*> history) {
 	const auto peer = history->peer;
 	if (!IsTracked(peer)) {
@@ -618,19 +628,24 @@ void InjectDeleted(
 	const auto historyEmpty = history->isEmpty();
 	auto from = int64(0);
 	auto till = int64(-1); // Both inclusive.
-	if (older) {
+	if (empty && historyEmpty) {
+		// Nothing on the server at all (the chat was deleted or cleared):
+		// everything that was kept goes back.
+		from = 0;
+		till = kMax;
+	} else if (older) {
 		// An empty older slice means the beginning of the chat was reached.
 		from = empty ? 0 : sliceMin;
 		till = !historyEmpty
 			? (int64(history->minMsgId().bare) - 1)
 			: history->loadedAtBottom()
 			? kMax
-			: (empty ? -1 : sliceMax);
+			: sliceMax;
 	} else {
 		// An empty newer slice means the end of the chat was reached.
 		from = !historyEmpty
 			? (int64(history->maxMsgId().bare) + 1)
-			: (empty ? kMax : sliceMin);
+			: sliceMin;
 		till = empty ? kMax : sliceMax;
 	}
 	if (from > till) {

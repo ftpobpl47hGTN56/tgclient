@@ -64,6 +64,11 @@ void KeepDeletedById(
 // the BearGram settings.
 void KeepHistory(not_null<History*> history);
 
+// Right after the chat was cleared here: the kept messages are shown again.
+// Without it the cleared chat is marked as fully loaded and empty, so it
+// would not ask for messages (and get the kept ones) until a restart.
+void RestoreKept(not_null<History*> history);
+
 // Call before an edit from the server is applied.
 void RecordEdit(not_null<HistoryItem*> item, const QString &newText);
 

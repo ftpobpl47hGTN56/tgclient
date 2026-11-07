@@ -2295,6 +2295,9 @@ void ApiWrap::deleteHistory(
 	} else if (history) {
 		history->clear(History::ClearType::ClearHistory);
 	}
+	if (history && BearGram::IsTracked(peer)) {
+		BearGram::RestoreKept(history);
+	}
 }
 
 void ApiWrap::applyUpdates(
