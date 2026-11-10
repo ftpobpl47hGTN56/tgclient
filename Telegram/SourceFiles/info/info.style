@@ -944,6 +944,12 @@ topBarBearFilter: IconButton(topBarSearch) {
 	iconPosition: point(8px, 15px);
 }
 topBarBearFilterActive: icon {{ "menu/tag_filter", windowActiveTextFg }};
+// BearGram: the discussion group of a channel, or the channel of a group.
+topBarBearDiscussion: IconButton(topBarSearch) {
+	icon: icon {{ "menu/discussion", menuIconFg }};
+	iconOver: icon {{ "menu/discussion", menuIconFgOver }};
+	iconPosition: point(8px, 15px);
+}
 bearFilterRowEdit: IconButton {
 	width: 36px;
 	height: 36px;

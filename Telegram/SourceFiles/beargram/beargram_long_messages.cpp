@@ -7,12 +7,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_long_messages.h"
 
 #include "beargram/beargram_settings.h"
+#include "data/data_groups.h"
 #include "data/data_session.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "main/main_session.h"
 #include "ui/text/text.h"
 #include "ui/click_handler.h"
+#include "ui/widgets/popup_menu.h"
+#include "styles/style_menu_icons.h"
 
 namespace BearGram {
 namespace {
@@ -168,6 +171,35 @@ ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item) {
 	});
 	links.emplace(id, result);
 	return result;
+}
+
+void AddCollapseAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<HistoryItem*> item) {
+	auto &expanded = Expanded();
+	if (expanded.empty()) {
+		return;
+	}
+	// An album is expanded by the item its view is made for.
+	auto found = (HistoryItem*)nullptr;
+	if (expanded.contains(item->fullId())) {
+		found = item;
+	} else if (const auto group = item->history()->owner().groups().find(
+			item)) {
+		for (const auto &other : group->items) {
+			if (expanded.contains(other->fullId())) {
+				found = other;
+				break;
+			}
+		}
+	}
+	if (!found) {
+		return;
+	}
+	const auto link = ToggleLink(found);
+	menu->addAction(u"Свернуть"_q, [=] {
+		link->onClick({});
+	}, &st::menuIconCollapse);
 }
 
 } // namespace BearGram

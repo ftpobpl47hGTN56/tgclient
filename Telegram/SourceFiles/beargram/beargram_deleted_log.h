@@ -92,6 +92,13 @@ void AddEditHistoryAction(
 // The user cleared the history or deleted the chat.
 void ForgetPeer(not_null<PeerData*> peer);
 
+// What is saved for the chat: deleted copies and edit history, in bytes.
+[[nodiscard]] int64 SavedSize(not_null<PeerData*> peer);
+
+// "Очистить сохранённое" in the chat menu: everything saved for this chat
+// is erased and its kept deleted messages disappear from it.
+void ClearPeer(not_null<PeerData*> peer);
+
 // Destroys all kept deleted messages and erases the edit history.
 void ClearAll();
 

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_context_menu.h"
 
+#include "beargram/beargram_long_messages.h"
 #include "beargram/beargram_post_filter.h"
 #include "beargram/beargram_deleted_log.h"
 #include "beargram/beargram_local_hide.h"
@@ -1962,6 +1963,7 @@ void FillContextMenuItems(
 		if (!item->isUploading()) {
 			BearGram::AddLocalHideActions(result, item);
 		}
+		BearGram::AddCollapseAction(result, item);
 		BearGram::AddReadFullAction(
 			result,
 			item,

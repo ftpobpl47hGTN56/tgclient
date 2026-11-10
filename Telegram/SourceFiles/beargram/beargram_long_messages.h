@@ -10,6 +10,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 class HistoryItem;
 
+namespace Ui {
+class PopupMenu;
+} // namespace Ui
+
 namespace Ui::Text {
 class String;
 } // namespace Ui::Text
@@ -51,5 +55,10 @@ struct CollapsedRich {
 
 [[nodiscard]] QString ToggleText(bool expanded);
 [[nodiscard]] ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item);
+
+// "Свернуть" in the message menu while the message is expanded.
+void AddCollapseAction(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<HistoryItem*> item);
 
 } // namespace BearGram

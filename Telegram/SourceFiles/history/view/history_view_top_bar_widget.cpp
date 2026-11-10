@@ -131,6 +131,7 @@ TopBarWidget::TopBarWidget(
 , _groupCall(this, st::topBarGroupCall)
 , _search(this, st::topBarSearch)
 , _bearFilter(this, st::topBarBearFilter)
+, _bearDiscussion(this, st::topBarBearDiscussion)
 , _infoToggle(this, st::topBarInfo)
 , _menuToggle(this, st::topBarMenuToggle)
 , _titlePeerText(st::windowMinWidth / 3)
@@ -169,6 +170,15 @@ TopBarWidget::TopBarWidget(
 		_controller->show(Box(
 			BearGram::PostFilter::FilterBox,
 			&_controller->session()));
+	});
+	_bearDiscussion->setClickedCallback([=] {
+		const auto peer = _activeChat.key.peer();
+		const auto channel = peer ? peer->asChannel() : nullptr;
+		if (const auto linked = channel ? channel->discussionLink() : nullptr) {
+			_controller->showPeerHistory(
+				linked,
+				Window::SectionShow::Way::Forward);
+		}
 	});
 	BearGram::PostFilter::EnabledValue(
 	) | rpl::on_next([=](bool enabled) {
@@ -234,7 +244,12 @@ TopBarWidget::TopBarWidget(
 		| UpdateFlag::Rights
 		| UpdateFlag::EmojiStatus
 		| UpdateFlag::Name
+		| UpdateFlag::DiscussionLink
 	) | rpl::on_next([=](const Data::PeerUpdate &update) {
+		if ((update.flags & UpdateFlag::DiscussionLink)
+			&& (_activeChat.key.peer() == update.peer)) {
+			updateControlsVisibility();
+		}
 		if ((update.flags & UpdateFlag::Name)
 			&& (update.peer == titleNamePeer())) {
 			TopBarWidget::update();
@@ -282,6 +297,7 @@ TopBarWidget::TopBarWidget(
 	_groupCall->setAccessibleName(tr::lng_group_call_title(tr::now));
 	_search->setAccessibleName(tr::lng_shortcuts_search(tr::now));
 	_bearFilter->setAccessibleName(u"Фильтр постов"_q);
+	_bearDiscussion->setAccessibleName(u"Обсуждение"_q);
 	_infoToggle->setAccessibleName(tr::lng_settings_section_info(tr::now));
 	_menuToggle->setAccessibleName(tr::lng_chat_menu(tr::now));
 	_back->setAccessibleName(tr::lng_go_back(tr::now));
@@ -1144,6 +1160,20 @@ void TopBarWidget::updateSearchVisibility() {
 		&& !_chooseForReportReason
 		&& filterPeer
 		&& !filterPeer->isUser());
+	// A channel opens its discussion group, a group its channel.
+	const auto linkedChannel = filterPeer ? filterPeer->asChannel() : nullptr;
+	const auto linked = linkedChannel
+		? linkedChannel->discussionLink()
+		: nullptr;
+	_bearDiscussion->setVisible(searchAllowedMode
+		&& !_chooseForReportReason
+		&& (_activeChat.section == Section::History)
+		&& linked);
+	if (linked) {
+		_bearDiscussion->setAccessibleName(linkedChannel->isBroadcast()
+			? u"Обсуждение"_q
+			: u"Канал"_q);
+	}
 }
 
 void TopBarWidget::updateInfoButtonVisibility() {
@@ -1335,6 +1365,10 @@ void TopBarWidget::updateControlsGeometry() {
 	_bearFilter->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_bearFilter->isHidden()) {
 		_rightTaken += _bearFilter->width() + st::topBarCallSkip;
+	}
+	_bearDiscussion->moveToRight(_rightTaken, otherButtonsTop);
+	if (!_bearDiscussion->isHidden()) {
+		_rightTaken += _bearDiscussion->width() + st::topBarCallSkip;
 	}
 
 	updateMembersShowArea();

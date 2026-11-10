@@ -1152,6 +1152,32 @@ void Filler::addBearGramLogToggle() {
 			? u"Удалённые сообщения этого чата будут сохраняться"_q
 			: u"Удалённые сообщения этого чата не сохраняются"_q);
 	}, &st::menuIconArchive);
+
+	// Erasing what was saved for this chat without going to settings.
+	const auto size = BearGram::SavedSize(peer);
+	_addAction(
+		u"Очистить сохранённое · "_q + Ui::FormatSizeText(size),
+		[=] {
+			if (!BearGram::SavedSize(peer)) {
+				controller->showToast(
+					u"Для этого чата ничего не сохранено"_q);
+				return;
+			}
+			controller->show(Ui::MakeConfirmBox({
+				.text = u"Удалить сохранённые удалённые сообщения и "
+					"историю правок этого чата? Они исчезнут с этого "
+					"устройства, на сервере ничего не изменится."_q,
+				.confirmed = [=](Fn<void()> close) {
+					BearGram::ClearPeer(peer);
+					close();
+					controller->showToast(
+						u"Сохранённая переписка очищена"_q);
+				},
+				.confirmText = u"Очистить"_q,
+				.confirmStyle = &st::attentionBoxButton,
+			}));
+		},
+		&st::menuIconClear);
 }
 
 void Filler::addBearGramWallpaper() {

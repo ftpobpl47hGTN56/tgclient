@@ -767,6 +767,48 @@ void ForgetPeer(not_null<PeerData*> peer) {
 	}
 }
 
+int64 SavedSize(not_null<PeerData*> peer) {
+	const auto &state = Instance();
+	auto result = int64(0);
+	const auto peerKey = PeerKey(peer);
+	if (const auto i = state.deleted.find(peerKey); i != end(state.deleted)) {
+		for (const auto &[id, entry] : i->second) {
+			result += entry.raw.size();
+		}
+	}
+	const auto prefix = peerKey + ':';
+	for (auto i = state.edits.lower_bound(prefix)
+		; i != end(state.edits) && i->first.startsWith(prefix)
+		; ++i) {
+		for (const auto &version : i->second) {
+			result += version.text.toUtf8().size();
+		}
+	}
+	return result;
+}
+
+void ClearPeer(not_null<PeerData*> peer) {
+	auto &state = Instance();
+	const auto prefix = PeerKey(peer) + ':';
+	auto ids = std::vector<MsgId>();
+	for (const auto &key : state.kept) {
+		if (key.startsWith(prefix)) {
+			ids.push_back(MsgId(key.mid(prefix.size()).toLongLong()));
+		}
+	}
+	ForgetPeer(peer);
+	FlushWrites();
+	auto toDestroy = std::vector<not_null<HistoryItem*>>();
+	for (const auto id : ids) {
+		if (const auto item = peer->owner().message(peer, id)) {
+			toDestroy.push_back(item);
+		}
+	}
+	for (const auto &item : toDestroy) {
+		item->destroy();
+	}
+}
+
 void ClearAll() {
 	auto &state = Instance();
 	const auto kept = base::take(state.kept);

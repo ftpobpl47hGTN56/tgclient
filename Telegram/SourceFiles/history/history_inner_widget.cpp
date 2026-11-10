@@ -65,6 +65,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
 #include "window/window_session_controller.h"
+#include "beargram/beargram_long_messages.h"
 #include "beargram/beargram_local_hide.h"
 #include "beargram/beargram_post_filter.h"
 #include "beargram/beargram_read_full.h"
@@ -3578,6 +3579,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				if (!item->isUploading()) {
 					BearGram::AddLocalHideActions(_menu.get(), item);
 				}
+				BearGram::AddCollapseAction(_menu.get(), item);
 				BearGram::AddReadFullAction(
 					_menu.get(),
 					item,
@@ -3910,6 +3912,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				if (!item->isUploading()) {
 					BearGram::AddLocalHideActions(_menu.get(), item);
 				}
+				BearGram::AddCollapseAction(_menu.get(), item);
 				BearGram::AddReadFullAction(
 					_menu.get(),
 					item,
