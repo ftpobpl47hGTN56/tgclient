@@ -70,7 +70,7 @@ inline auto LanguageFromLocale(QLocale loc) {
 
 constexpr auto kDictionariesManifestChannel = "tdhbcfiles"_cs;
 constexpr auto kDictionariesManifestPostId = 2949;
-constexpr auto kDictionariesRev = 1;
+constexpr auto kDictionariesRev = 2;
 
 // Runtime-loaded dictionaries manifest. Kept in memory only: fetched from
 // the pinned JSON post the first time something actually needs it
@@ -277,7 +277,8 @@ void DownloadDictionaryInBackground(
 		not_null<Main::Session*> session,
 		int counter,
 		std::vector<int> langs,
-		Fn<void()> done = nullptr) {
+		Fn<void()> done = nullptr,
+		bool force = false) {
 	if (counter >= langs.size()) {
 		if (done) {
 			done();
@@ -302,9 +303,9 @@ void DownloadDictionaryInBackground(
 			}
 		}
 
-		DownloadDictionaryInBackground(session, counter, langs, done);
+		DownloadDictionaryInBackground(session, counter, langs, done, force);
 	};
-	if (DictionaryExists(id)) {
+	if (DictionaryExists(id) && !(force && IsSupportedLang(id))) {
 		destroyer();
 		return;
 	}
@@ -438,6 +439,7 @@ void ForceRefreshDictionaries(
 		if (DictionariesList.empty()) {
 			return;
 		}
+		Platform::Spellchecker::UpdateLanguages({});
 		DownloadDictionaryInBackground(session, 0, enabled, [=] {
 			Platform::Spellchecker::UpdateLanguages(
 				Core::App().settings().dictionariesEnabled());
@@ -458,7 +460,7 @@ void ForceRefreshDictionaries(
 				WriteDictionariesRev();
 			}
 			then();
-		});
+		}, true);
 	}));
 }
 

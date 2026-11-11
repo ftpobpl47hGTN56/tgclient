@@ -109,6 +109,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/download_manager_mtproto.h"
 #include "storage/file_upload.h"
 #include "storage/storage_account.h"
+#include "tgw/tgw_storage.h"
 
 namespace {
 
@@ -174,6 +175,29 @@ void ShowChannelsLimitBox(not_null<PeerData*> peer) {
 		action.options,
 		action.replyTo,
 		action.replaceMediaOf);
+}
+
+[[nodiscard]] std::unique_ptr<FileLoadTask> PrepareVideoCoverTask(
+		not_null<Main::Session*> session,
+		Ui::PreparedFile &file,
+		const FileLoadTo &to) {
+	return file.videoCover
+		? std::make_unique<FileLoadTask>(FileLoadTask::Args{
+			.session = session,
+			.filepath = file.videoCover->path,
+			.content = file.videoCover->content,
+			.information = std::move(file.videoCover->information),
+			.videoCover = nullptr,
+			.type = SendMediaType::Photo,
+			.to = to,
+			.caption = TextWithTags(),
+			.spoiler = false,
+			.album = nullptr,
+			.forceFile = false,
+			.sendLargePhotos = false,
+			.idOverride = 0,
+		})
+		: nullptr;
 }
 
 [[nodiscard]] QString FormatVideoTimestamp(TimeId seconds) {
@@ -1491,6 +1515,7 @@ void ApiWrap::markContentsRead(not_null<HistoryItem*> item) {
 void ApiWrap::deleteAllFromParticipant(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> from) {
+	Tgw::ClearParticipantStorage(_session, channel->id, from->id);
 	const auto history = _session->data().historyLoaded(channel);
 	const auto ids = history
 		? history->collectMessagesFromParticipantToDelete(from)
@@ -2910,6 +2935,10 @@ void ApiWrap::refreshFileReference(
 				request(MTPstories_GetStoriesByID(
 					_session->data().peer(storyId.peer)->input(),
 					MTP_vector<MTPint>(1, MTP_int(storyId.story))));
+			} else if ((item->isScheduled() || item->isBusinessShortcut())
+				&& (item->isSending() || item->hasFailed())) {
+				// Not sent yet, there is no server id to request.
+				fail();
 			} else if (item->isScheduled()) {
 				const auto realId = _session->scheduledMessages().lookupId(
 					item);
@@ -4310,23 +4339,7 @@ void ApiWrap::editMedia(
 		.filepath = file.path,
 		.content = file.content,
 		.information = std::move(file.information),
-		.videoCover = (file.videoCover
-			? std::make_unique<FileLoadTask>(FileLoadTask::Args{
-				.session = &session(),
-				.filepath = file.videoCover->path,
-				.content = file.videoCover->content,
-				.information = std::move(file.videoCover->information),
-				.videoCover = nullptr,
-				.type = SendMediaType::Photo,
-				.to = to,
-				.caption = TextWithTags(),
-				.spoiler = false,
-				.album = nullptr,
-				.forceFile = false,
-				.sendLargePhotos = false,
-				.idOverride = 0,
-			})
-			: nullptr),
+		.videoCover = PrepareVideoCoverTask(&session(), file, to),
 		.type = type,
 		.to = to,
 		.caption = caption,
@@ -4387,23 +4400,7 @@ void ApiWrap::sendFiles(
 			.filepath = file.path,
 			.content = file.content,
 			.information = std::move(file.information),
-			.videoCover = (file.videoCover
-				? std::make_unique<FileLoadTask>(FileLoadTask::Args{
-					.session = &session(),
-					.filepath = file.videoCover->path,
-					.content = file.videoCover->content,
-					.information = std::move(file.videoCover->information),
-					.videoCover = nullptr,
-					.type = SendMediaType::Photo,
-					.to = to,
-					.caption = TextWithTags(),
-					.spoiler = false,
-					.album = nullptr,
-					.forceFile = false,
-					.sendLargePhotos = false,
-					.idOverride = 0,
-				})
-				: nullptr),
+			.videoCover = PrepareVideoCoverTask(&session(), file, to),
 			.type = uploadWithType,
 			.to = fileTo,
 			.caption = std::move(file.caption),
@@ -4813,7 +4810,7 @@ void ApiWrap::sendMessage(
 		_session->user()).flags;
 	TextUtilities::PrepareForSending(left, prepareFlags);
 
-	HistoryItem *lastMessage = nullptr;
+	auto lastMessage = (HistoryItem*)nullptr;
 
 	auto &histories = history->owner().histories();
 	const auto messageLengthLimit = Data::PremiumLimits(

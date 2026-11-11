@@ -73,6 +73,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_shared_media.h"
 #include "storage/storage_account.h"
 #include "support/support_helper.h"
+#include "tgw/tgw_storage.h"
 #include "ui/image/image.h"
 #include "ui/text/text_options.h"
 #include "ui/text/text_utilities.h"
@@ -759,6 +760,7 @@ void History::destroyMessage(not_null<HistoryItem*> item) {
 }
 
 void History::destroyMessagesByDates(TimeId minDate, TimeId maxDate) {
+	Tgw::ClearDatesStorage(this, minDate, maxDate);
 	auto toDestroy = std::vector<not_null<HistoryItem*>>();
 	toDestroy.reserve(_items.size());
 	for (const auto &message : _items) {
@@ -2008,8 +2010,8 @@ void History::checkLastMessage() {
 
 void History::addItemsToLists(
 		const std::vector<not_null<HistoryItem*>> &items) {
-	std::deque<not_null<UserData*>> *lastAuthors = nullptr;
-	base::flat_set<not_null<PeerData*>> *markupSenders = nullptr;
+	auto lastAuthors = (std::deque<not_null<UserData*>>*)nullptr;
+	auto markupSenders = (base::flat_set<not_null<PeerData*>>*)nullptr;
 	if (peer->isChat()) {
 		lastAuthors = &peer->asChat()->lastAuthors;
 		markupSenders = &peer->asChat()->markupSenders;
@@ -4520,6 +4522,7 @@ void History::clear(ClearType type, bool markEmpty) {
 }
 
 void History::clearUpTill(MsgId availableMinId) {
+	Tgw::ClearHistoryStorage(this, availableMinId);
 	auto remove = std::vector<not_null<HistoryItem*>>();
 	remove.reserve(_items.size());
 	for (const auto &item : _items) {
@@ -4527,6 +4530,7 @@ void History::clearUpTill(MsgId availableMinId) {
 		if (!item->isRegular()) {
 			continue;
 		} else if (itemId == availableMinId) {
+			Tgw::DeleteMessageStorage(item.get());
 			owner().scheduleItemPhotoCacheClear(item.get());
 			item->applyEditionToHistoryCleared();
 		} else if (itemId < availableMinId) {
