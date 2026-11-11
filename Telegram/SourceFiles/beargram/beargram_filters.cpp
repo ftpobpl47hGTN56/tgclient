@@ -11,10 +11,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_local_hide.h"
 #include "beargram/beargram_post_filter.h"
 #include "beargram/beargram_settings.h"
+#include "data/data_changes.h"
 #include "data/data_channel.h"
+#include "data/data_session.h"
 #include "data/data_peer.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/view/history_view_element.h"
 #include "main/main_session.h"
 
 #include <QtCore/QRegularExpression>
@@ -33,6 +36,52 @@ struct AdCheck {
 	int signature = 0;
 	bool ad = false;
 };
+
+// Hidden messages have zero height. When what decides it changes (the
+// blocked list arrives, the discussion group of a channel becomes known),
+// the shown messages must recount their size, or the chat keeps wrong
+// heights: it jumped, hung while switching chats or crashed.
+void Relayout(not_null<History*> history) {
+	auto &owner = history->owner();
+	for (const auto &block : history->blocks) {
+		for (const auto &view : block->messages) {
+			owner.requestItemResize(view->data());
+		}
+	}
+}
+
+void RelayoutGroups(not_null<Main::Session*> session) {
+	auto &owner = session->data();
+	const auto relayout = [&](not_null<PeerData*> peer) {
+		if (const auto history = owner.historyLoaded(peer.get())) {
+			Relayout(history);
+		}
+	};
+	owner.enumerateGroups(relayout);
+}
+
+// The discussion group of a channel is known only after its full info is
+// loaded, which usually happens right when the channel is opened.
+void WatchDiscussionLinks(not_null<Main::Session*> session) {
+	static auto watched = base::flat_set<not_null<Main::Session*>>();
+	if (!watched.emplace(session).second) {
+		return;
+	}
+	session->changes().peerUpdates(
+		Data::PeerUpdate::Flag::DiscussionLink
+	) | rpl::on_next([=](const Data::PeerUpdate &update) {
+		if (!update.peer->isBroadcast()) {
+			return;
+		}
+		if (const auto history = session->data().historyLoaded(
+				update.peer)) {
+			Relayout(history);
+		}
+	}, session->lifetime());
+	session->lifetime().add([=] {
+		watched.remove(session);
+	});
+}
 
 [[nodiscard]] BlockedList &BlockedFor(not_null<Main::Session*> session) {
 	static auto lists = base::flat_map<PeerId, BlockedList>();
@@ -56,6 +105,8 @@ void LoadBlocked(
 		const auto loaded = offset + int(slice.list.size());
 		if (!slice.list.isEmpty() && loaded < slice.total) {
 			LoadBlocked(strong, loaded);
+		} else if (!list.ids.empty()) {
+			RelayoutGroups(strong); // Their senders may be hidden now.
 		}
 	});
 }
@@ -152,7 +203,9 @@ bool IsFilteredOut(
 		return true;
 	} else if (item->out() || !item->isRegular()) {
 		return false;
-	} else if (IsOwnChannel(item->history()->peer)) {
+	}
+	WatchDiscussionLinks(&item->history()->session());
+	if (IsOwnChannel(item->history()->peer)) {
 		// Posts there are the user's own content even when a bot or another
 		// admin published them (they are not out() then).
 		return false;

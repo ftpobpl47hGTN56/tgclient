@@ -33,13 +33,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
+#include <QtCore/QSaveFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 
+#include <atomic>
 #include <deque>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <tuple>
 
@@ -266,8 +269,19 @@ void Load(State &state) {
 	return state;
 }
 
-void WriteLog() {
-	const auto &state = Instance();
+// The files are made in the background: with many saved messages the
+// JSON and base64 of the whole file took long enough on the main thread to
+// freeze the app ("Не отвечает") every time something was saved.
+using DeletedMap = std::map<QString, std::map<int64, DeletedEntry>>;
+using EditsMap = base::flat_map<QString, std::vector<EditVersion>>;
+
+struct LogSnapshot {
+	base::flat_set<QString> selected;
+	base::flat_set<QString> except;
+	EditsMap edits;
+};
+
+[[nodiscard]] QByteArray SerializeLog(const LogSnapshot &state) {
 	auto selected = QJsonArray();
 	for (const auto &key : state.selected) {
 		selected.push_back(key);
@@ -291,16 +305,12 @@ void WriteLog() {
 	object.insert(u"selected"_q, selected);
 	object.insert(u"except"_q, except);
 	object.insert(u"edits"_q, edits);
-	auto file = QFile(LogPath());
-	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-		file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
-	}
+	return QJsonDocument(object).toJson(QJsonDocument::Compact);
 }
 
-void WriteDeleted() {
-	const auto &state = Instance();
+[[nodiscard]] QByteArray SerializeDeleted(const DeletedMap &deleted) {
 	auto peers = QJsonObject();
-	for (const auto &[peerKey, messages] : state.deleted) {
+	for (const auto &[peerKey, messages] : deleted) {
 		auto list = QJsonObject();
 		for (const auto &[msgId, entry] : messages) {
 			auto value = QJsonObject();
@@ -318,10 +328,79 @@ void WriteDeleted() {
 	auto object = QJsonObject();
 	object.insert(u"version"_q, 1);
 	object.insert(u"peers"_q, peers);
-	auto file = QFile(DeletedPath());
-	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-		file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+	return QJsonDocument(object).toJson(QJsonDocument::Compact);
+}
+
+// Writes go one after another; a write older than the last one is skipped.
+struct FileWriter {
+	std::mutex mutex;
+	std::atomic<int> generation = 0;
+	int written = 0;
+};
+
+void WriteFile(
+		const std::shared_ptr<FileWriter> &writer,
+		int generation,
+		const QString &path,
+		const QByteArray &bytes) {
+	std::lock_guard<std::mutex> lock(writer->mutex);
+	if (generation < writer->written) {
+		return;
 	}
+	writer->written = generation;
+	auto file = QSaveFile(path);
+	if (file.open(QIODevice::WriteOnly)) {
+		file.write(bytes);
+		file.commit();
+	}
+}
+
+[[nodiscard]] std::shared_ptr<FileWriter> LogWriter() {
+	static const auto result = std::make_shared<FileWriter>();
+	return result;
+}
+
+[[nodiscard]] std::shared_ptr<FileWriter> DeletedWriter() {
+	static const auto result = std::make_shared<FileWriter>();
+	return result;
+}
+
+[[nodiscard]] LogSnapshot MakeLogSnapshot() {
+	const auto &state = Instance();
+	return LogSnapshot{
+		.selected = state.selected,
+		.except = state.except,
+		.edits = state.edits,
+	};
+}
+
+void WriteLog(bool async = true) {
+	const auto writer = LogWriter();
+	const auto generation = ++writer->generation;
+	const auto path = LogPath();
+	auto snapshot = MakeLogSnapshot();
+	if (!async) {
+		WriteFile(writer, generation, path, SerializeLog(snapshot));
+		return;
+	}
+	crl::async([=, snapshot = std::move(snapshot)] {
+		WriteFile(writer, generation, path, SerializeLog(snapshot));
+	});
+}
+
+void WriteDeleted(bool async = true) {
+	const auto writer = DeletedWriter();
+	const auto generation = ++writer->generation;
+	const auto path = DeletedPath();
+	// Raw bytes are shared, the copy is only the maps.
+	auto snapshot = Instance().deleted;
+	if (!async) {
+		WriteFile(writer, generation, path, SerializeDeleted(snapshot));
+		return;
+	}
+	crl::async([=, snapshot = std::move(snapshot)] {
+		WriteFile(writer, generation, path, SerializeDeleted(snapshot));
+	});
 }
 
 // Both files are written as a whole, which takes long with many saved
@@ -337,29 +416,34 @@ struct PendingWrites {
 };
 
 void FlushWrites();
+void FlushWrites(bool async);
 
 [[nodiscard]] PendingWrites &Pending() {
 	static const auto result = [] {
 		const auto pending = new PendingWrites();
-		pending->timer.setCallback(FlushWrites);
+		pending->timer.setCallback([] { FlushWrites(); });
 		QObject::connect(
 			QCoreApplication::instance(),
 			&QCoreApplication::aboutToQuit,
-			FlushWrites);
+			[] { FlushWrites(false); });
 		return pending;
 	}();
 	return *result;
 }
 
-void FlushWrites() {
+void FlushWrites(bool async) {
 	auto &pending = Pending();
 	pending.timer.cancel();
 	if (base::take(pending.log)) {
-		WriteLog();
+		WriteLog(async);
 	}
 	if (base::take(pending.deleted)) {
-		WriteDeleted();
+		WriteDeleted(async);
 	}
+}
+
+void FlushWrites() {
+	FlushWrites(true);
 }
 
 void Save() {

@@ -140,6 +140,19 @@ void HandleResponse(QNetworkReply *reply) {
 	}
 	const auto update = ToUpdate(*release);
 	state.available = update;
+	if (!update && !CurrentBuild() && release->version == int(AppVersion)) {
+		// A local build has no number, so it can't tell whether the
+		// GitHub build of the same version is newer.
+		Finish(u"У вас локальная сборка BearGram "_q
+			+ release->versionText
+			+ u". Последняя сборка на GitHub: "_q
+			+ release->versionText
+			+ u", сборка "_q
+			+ QString::number(release->build)
+			+ u". Чтобы получить её изменения, сделайте git pull и "
+				"пересоберите, или скачайте её из Releases."_q);
+		return;
+	}
 	Finish(update
 		? (u"Доступна BearGram "_q + update->title + u"."_q)
 		: (u"У вас последняя версия BearGram ("_q

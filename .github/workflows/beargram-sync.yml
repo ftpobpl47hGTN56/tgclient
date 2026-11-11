@@ -29,8 +29,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: beargram
+          # A full clone: with "filter: blob:none" the merge had to fetch
+          # missing upstream files from this repository, which doesn't have
+          # them ("not our ref"), and every sync failed.
           fetch-depth: 0
-          filter: blob:none
           # Upstream commits touch .github/workflows, and pushing them needs
           # a token with the "workflows" permission. GITHUB_TOKEN doesn't
           # have it, so a personal token is used when it is set.
