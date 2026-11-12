@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "apiwrap.h"
 
+#include "beargram/beargram_local_pins.h"
+
 #include "beargram/beargram_deleted_log.h"
 #include "api/api_authorizations.h"
 #include "api/api_attached_stickers.h"
@@ -433,7 +435,12 @@ void ApiWrap::checkFilterInvite(
 }
 
 void ApiWrap::savePinnedOrder(Data::Folder *folder) {
-	const auto &order = _session->data().pinnedChatsOrder(folder);
+	// BearGram: the order is kept here, the server gets its own pins only.
+	BearGram::LocalPins::RememberOrder(_session, folder);
+	auto order = _session->data().pinnedChatsOrder(folder);
+	order.erase(ranges::remove_if(order, [](const Dialogs::Key &key) {
+		return BearGram::LocalPins::IsLocal(key);
+	}), end(order));
 	const auto input = [](Dialogs::Key key) {
 		if (const auto history = key.history()) {
 			if (const auto channel = history->peer->asChannel()

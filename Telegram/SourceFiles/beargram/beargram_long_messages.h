@@ -56,9 +56,13 @@ struct CollapsedRich {
 [[nodiscard]] QString ToggleText(bool expanded);
 [[nodiscard]] ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item);
 
-// "Свернуть" in the message menu while the message is expanded.
+// "Свернуть" / "Развернуть" in the message menu for a message (or an
+// album) laid out with the toggle.
 void AddCollapseAction(
 	not_null<Ui::PopupMenu*> menu,
 	not_null<HistoryItem*> item);
+
+// The message (or its album) was laid out with the toggle.
+[[nodiscard]] bool IsCollapsible(not_null<HistoryItem*> item);
 
 } // namespace BearGram

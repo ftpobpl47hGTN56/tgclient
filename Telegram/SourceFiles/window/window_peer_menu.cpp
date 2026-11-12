@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
 
+#include "beargram/beargram_local_pins.h"
+
 #include "beargram/beargram_deleted_log.h"
 #include "beargram/beargram_nicknames.h"
 #include "beargram/beargram_wallpapers.h"
@@ -452,6 +454,13 @@ void TogglePinnedThread(
 
 	owner->setChatPinned(entry, FilterId(), isPinned);
 	if (const auto history = entry->asHistory()) {
+		// BearGram: pins over the server limit stay on this device.
+		if (!isPinned) {
+			BearGram::LocalPins::RemoveLocal(history);
+		}
+		BearGram::LocalPins::RememberOrder(
+			&history->session(),
+			history->folder());
 		const auto flags = isPinned
 			? MTPmessages_ToggleDialogPin::Flag::f_pinned
 			: MTPmessages_ToggleDialogPin::Flag(0);
@@ -463,7 +472,24 @@ void TogglePinnedThread(
 			MTP_flags(flags),
 			peer
 		)).done([=] {
+			if (isPinned) {
+				// Pinned on the server now, not a local pin anymore.
+				BearGram::LocalPins::RemoveLocal(history);
+			}
 			owner->notifyPinnedDialogsOrderUpdated();
+			if (onToggled) {
+				onToggled();
+			}
+		}).fail([=](const MTP::Error &error) {
+			// PINNED_DIALOGS_TOO_MUCH: over the limit, pinned here only.
+			if (isPinned
+				&& error.type().startsWith(u"PINNED_"_q)
+				&& history->isPinnedDialog(FilterId())) {
+				BearGram::LocalPins::AddLocal(history);
+				BearGram::LocalPins::RememberOrder(
+					&history->session(),
+					history->folder());
+			}
 			if (onToggled) {
 				onToggled();
 			}

@@ -34,6 +34,40 @@ struct LinesInfo {
 	return result;
 }
 
+// Messages laid out with the toggle, for the message menu.
+[[nodiscard]] base::flat_set<FullMsgId> &Collapsible() {
+	static auto result = base::flat_set<FullMsgId>();
+	return result;
+}
+
+void MarkCollapsible(not_null<const HistoryItem*> item, bool collapsible) {
+	auto &set = Collapsible();
+	if (collapsible) {
+		set.emplace(item->fullId());
+	} else {
+		set.remove(item->fullId());
+	}
+}
+
+// The item of a message (or of its album) found in the set.
+[[nodiscard]] HistoryItem *FindIn(
+		const base::flat_set<FullMsgId> &set,
+		not_null<HistoryItem*> item) {
+	if (set.empty()) {
+		return nullptr;
+	} else if (set.contains(item->fullId())) {
+		return item;
+	} else if (const auto group = item->history()->owner().groups().find(
+			item)) {
+		for (const auto &other : group->items) {
+			if (set.contains(other->fullId())) {
+				return other;
+			}
+		}
+	}
+	return nullptr;
+}
+
 [[nodiscard]] const LinesInfo &CountLines(
 		const Ui::Text::String &text,
 		int width,
@@ -86,6 +120,7 @@ CollapsedText ComputeCollapsedText(
 		: 0;
 	const auto threshold = settings.collapseAfterLines;
 	if (lineHeight <= 0 || fullHeight <= threshold * lineHeight) {
+		MarkCollapsible(item, false);
 		return {};
 	}
 	const auto preview = std::clamp(
@@ -94,8 +129,10 @@ CollapsedText ComputeCollapsedText(
 		threshold);
 	const auto &info = CountLines(text, textWidth, fullHeight, preview);
 	if (info.lines <= threshold || int(info.bottoms.size()) < preview) {
+		MarkCollapsible(item, false);
 		return {};
 	}
+	MarkCollapsible(item, true);
 	auto result = CollapsedText{
 		.collapsible = true,
 		.expanded = Expanded().contains(item->fullId()),
@@ -122,8 +159,10 @@ CollapsedRich ComputeCollapsedRich(
 	}
 	const auto threshold = settings.collapseAfterLines;
 	if (fullHeight <= threshold * lineHeight) {
+		MarkCollapsible(item, false);
 		return {};
 	}
+	MarkCollapsible(item, true);
 	const auto preview = std::clamp(
 		settings.collapsedPreviewLines,
 		1,
@@ -176,30 +215,20 @@ ClickHandlerPtr ToggleLink(not_null<const HistoryItem*> item) {
 void AddCollapseAction(
 		not_null<Ui::PopupMenu*> menu,
 		not_null<HistoryItem*> item) {
-	auto &expanded = Expanded();
-	if (expanded.empty()) {
+	// An album is collapsed by the item its view is made for.
+	const auto found = FindIn(Expanded(), item);
+	const auto collapsed = found ? nullptr : FindIn(Collapsible(), item);
+	if (!found && !collapsed) {
 		return;
 	}
-	// An album is expanded by the item its view is made for.
-	auto found = (HistoryItem*)nullptr;
-	if (expanded.contains(item->fullId())) {
-		found = item;
-	} else if (const auto group = item->history()->owner().groups().find(
-			item)) {
-		for (const auto &other : group->items) {
-			if (expanded.contains(other->fullId())) {
-				found = other;
-				break;
-			}
-		}
-	}
-	if (!found) {
-		return;
-	}
-	const auto link = ToggleLink(found);
-	menu->addAction(u"Свернуть"_q, [=] {
+	const auto link = ToggleLink(found ? found : collapsed);
+	menu->addAction(found ? u"Свернуть"_q : u"Развернуть"_q, [=] {
 		link->onClick({});
-	}, &st::menuIconCollapse);
+	}, found ? &st::menuIconCollapse : &st::menuIconExpand);
+}
+
+bool IsCollapsible(not_null<HistoryItem*> item) {
+	return FindIn(Collapsible(), item) || FindIn(Expanded(), item);
 }
 
 } // namespace BearGram

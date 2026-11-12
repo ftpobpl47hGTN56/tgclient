@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "data/data_session.h"
 
+#include "beargram/beargram_local_pins.h"
+
 #include "beargram/beargram_deleted_log.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
@@ -2800,6 +2802,11 @@ void Session::setChatPinned(
 void Session::setPinnedFromEntryList(Dialogs::Key key, bool pinned) {
 	Expects(key.entry()->folderKnown());
 
+	if (!pinned && BearGram::LocalPins::IsLocal(key)) {
+		// BearGram: pinned on this device only, the server knows nothing.
+		BearGram::LocalPins::ScheduleMerge(_session);
+		return;
+	}
 	const auto list = chatsListFor(key.entry())->pinned();
 	if (pinned) {
 		list->addPinned(key);
@@ -2832,6 +2839,7 @@ void Session::applyPinnedChats(
 	}
 	chatsList(folder)->pinned()->applyList(this, list);
 	notifyPinnedDialogsOrderUpdated();
+	BearGram::LocalPins::ScheduleMerge(_session);
 }
 
 void Session::applyPinnedTopics(
@@ -2855,6 +2863,7 @@ void Session::applyDialogs(
 	if (requestFolder && count) {
 		requestFolder->chatsList()->setCloudListSize(*count);
 	}
+	BearGram::LocalPins::ScheduleMerge(_session);
 }
 
 void Session::applyDialog(
@@ -2946,11 +2955,9 @@ bool Session::pinnedCanPin(
 		|| (i->always().size() < pinnedChatsLimit(filterId));
 }
 
-int Session::pinnedChatsLimit(Data::Folder *folder) const {
-	const auto limits = Data::PremiumLimits(_session);
-	return folder
-		? limits.dialogsFolderPinnedCurrent()
-		: limits.dialogsPinnedCurrent();
+int Session::pinnedChatsLimit(Data::Folder * /*folder*/) const {
+	// BearGram: what the server refuses is pinned on this device.
+	return BearGram::LocalPins::kLimit;
 }
 
 int Session::pinnedChatsLimit(FilterId filterId) const {
@@ -2972,17 +2979,13 @@ int Session::pinnedChatsLimit(not_null<Data::SavedMessages*> saved) const {
 }
 
 rpl::producer<int> Session::maxPinnedChatsLimitValue(
-		Data::Folder *folder) const {
+		Data::Folder * /*folder*/) const {
 	// Premium limit from appconfig.
 	// We always use premium limit in the MainList limit producer,
 	// because it slices the list to that limit. We don't want to slice
 	// premium-ly added chats from the pinned list because of sync issues.
-	return _session->appConfig().value(
-	) | rpl::map([folder, limits = Data::PremiumLimits(_session)] {
-		return folder
-			? limits.dialogsFolderPinnedPremium()
-			: limits.dialogsPinnedPremium();
-	});
+	// BearGram: no limit, see pinnedChatsLimit(folder).
+	return rpl::single(BearGram::LocalPins::kLimit);
 }
 
 rpl::producer<int> Session::maxPinnedChatsLimitValue(
@@ -3049,6 +3052,7 @@ void Session::clearPinnedChats(Data::Folder *folder) {
 		_pinnedCommunitiesNotLoaded.clear();
 	}
 	chatsList(folder)->pinned()->clear();
+	BearGram::LocalPins::ScheduleMerge(_session);
 }
 
 void Session::reorderTwoPinnedChats(

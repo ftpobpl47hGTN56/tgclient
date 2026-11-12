@@ -10,6 +10,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "base/call_delayed.h"
 #include "core/application.h"
+#include "beargram/beargram_long_messages.h"
+#include "data/data_groups.h"
 #include "data/data_session.h"
 #include "iv/iv_instance.h"
 #include "window/window_session_controller.h"
@@ -33,15 +35,36 @@ constexpr auto kMinLength = 300;
 // See AddReadFullAction, the menu closes first.
 constexpr auto kOpenDelay = crl::time(200);
 
+// In an album the text is kept by one of the items (the last one for
+// files), a click on another file gave an empty text.
+[[nodiscard]] not_null<HistoryItem*> TextItem(not_null<HistoryItem*> item) {
+	if (item->richPage() || !item->originalText().text.isEmpty()) {
+		return item;
+	} else if (const auto group = item->history()->owner().groups().find(
+			item)) {
+		for (const auto &other : group->items) {
+			if (other->richPage() || !other->originalText().text.isEmpty()) {
+				return other;
+			}
+		}
+	}
+	return item;
+}
+
 } // namespace
 
 void AddReadFullAction(
 		not_null<Ui::PopupMenu*> menu,
-		not_null<HistoryItem*> item,
+		not_null<HistoryItem*> clicked,
 		not_null<Window::SessionController*> controller) {
+	const auto item = TextItem(clicked);
+	// A message with the "Развернуть" toggle is long whatever the length.
+	const auto collapsible = IsCollapsible(clicked);
 	if (item->richPage()) {
-		// The text of a rich message has its pictures as small icons only.
-		if (item->originalText().text.size() < kMinLength) {
+		// The text of a rich message has its pictures as small icons only,
+		// headings and lists don't count in its length.
+		if (!collapsible
+			&& item->originalText().text.size() < kMinLength) {
 			return;
 		}
 		const auto weak = base::make_weak(controller);
@@ -74,7 +97,8 @@ void AddReadFullAction(
 		}
 		copy = std::move(speech);
 	}
-	if (copy.text.size() < kMinLength) {
+	if (copy.text.isEmpty()
+		|| (!collapsible && copy.text.size() < kMinLength)) {
 		return;
 	}
 	menu->addAction(u"Читать полностью"_q, [=] {

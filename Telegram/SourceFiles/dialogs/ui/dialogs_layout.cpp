@@ -106,6 +106,33 @@ void PaintRowTopRight(
 		text);
 }
 
+// BearGram: the pin of a pinned chat in a yellow ring.
+void PaintPinnedIcon(
+		QPainter &p,
+		const style::icon &icon,
+		int x,
+		int y,
+		int outerWidth) {
+	const auto rect = style::rtlrect(
+		x,
+		y,
+		icon.width(),
+		icon.height(),
+		outerWidth);
+	const auto size = std::min(rect.width(), rect.height());
+	const auto line = style::ConvertScaleExact(1.5);
+	const auto radius = size / 2. - line / 2.;
+	{
+		auto hq = PainterHighQualityEnabler(p);
+		auto pen = QPen(QColor(0xF5, 0xC5, 0x18));
+		pen.setWidthF(line);
+		p.setPen(pen);
+		p.setBrush(Qt::NoBrush);
+		p.drawEllipse(QRectF(rect).center(), radius, radius);
+	}
+	icon.paint(p, x, y, outerWidth);
+}
+
 int PaintRightButtonImpl(QPainter &p, const PaintContext &context) {
 	if (context.width < st::columnMinimalWidthLeft) {
 		return 0;
@@ -239,7 +266,7 @@ int PaintBadges(
 			st::dialogsPinnedIcon,
 			context.active,
 			context.selected);
-		icon.paint(p, right - icon.width(), pinnedIconTop, context.width);
+		PaintPinnedIcon(p, icon, right - icon.width(), pinnedIconTop, context.width);
 		right -= icon.width() + st::dialogsUnreadPadding;
 	}
 	if ((!narrow || (painted < 2))
@@ -678,8 +705,9 @@ void PaintRow(
 				st::dialogsPinnedIcon,
 				context.active,
 				context.selected);
-			icon.paint(
+			PaintPinnedIcon(
 				p,
+				icon,
 				context.width - context.st->padding.right() - icon.width(),
 				texttop,
 				context.width);
@@ -776,7 +804,7 @@ void PaintRow(
 				st::dialogsPinnedIcon,
 				context.active,
 				context.selected);
-			icon.paint(p, context.width - context.st->padding.right() - icon.width(), texttop, context.width);
+			PaintPinnedIcon(p, icon, context.width - context.st->padding.right() - icon.width(), texttop, context.width);
 			availableWidth -= icon.width() + st::dialogsUnreadPadding;
 		}
 
@@ -816,8 +844,9 @@ void PaintRow(
 			st::dialogsPinnedIcon,
 			context.active,
 			context.selected);
-		icon.paint(
+		PaintPinnedIcon(
 			p,
+			icon,
 			context.width - context.st->padding.right() - icon.width(),
 			texttop,
 			context.width);

@@ -279,6 +279,8 @@ PRIVATE
     beargram/beargram_wallpapers.cpp
     beargram/beargram_wallpapers.h
     beargram/beargram_local_hide.h
+    beargram/beargram_local_pins.cpp
+    beargram/beargram_local_pins.h
     beargram/beargram_long_messages.cpp
     beargram/beargram_long_messages.h
     beargram/beargram_settings.cpp
