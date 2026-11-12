@@ -40,7 +40,7 @@ namespace BearGram::LocalPins {
 inline constexpr auto kLimit = 500;
 
 [[nodiscard]] bool IsLocal(not_null<History*> history);
-[[nodiscard]] bool IsLocal(const Dialogs::Key &key);
+[[nodiscard]] bool IsLocalKey(const Dialogs::Key &key);
 
 void AddLocal(not_null<History*> history);
 void RemoveLocal(not_null<History*> history);

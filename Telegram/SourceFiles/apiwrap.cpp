@@ -439,7 +439,7 @@ void ApiWrap::savePinnedOrder(Data::Folder *folder) {
 	BearGram::LocalPins::RememberOrder(_session, folder);
 	auto order = _session->data().pinnedChatsOrder(folder);
 	order.erase(ranges::remove_if(order, [](const Dialogs::Key &key) {
-		return BearGram::LocalPins::IsLocal(key);
+		return BearGram::LocalPins::IsLocalKey(key);
 	}), end(order));
 	const auto input = [](Dialogs::Key key) {
 		if (const auto history = key.history()) {

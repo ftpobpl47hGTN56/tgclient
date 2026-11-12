@@ -291,9 +291,9 @@ bool IsLocal(not_null<History*> history) {
 	return account && account->local.contains(history->peer->id);
 }
 
-bool IsLocal(const Dialogs::Key &key) {
+bool IsLocalKey(const Dialogs::Key &key) {
 	const auto history = key.history();
-	return history && IsLocal(history);
+	return history && IsLocal(not_null<History*>(history));
 }
 
 void AddLocal(not_null<History*> history) {

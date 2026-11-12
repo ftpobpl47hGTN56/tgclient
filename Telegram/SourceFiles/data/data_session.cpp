@@ -2802,7 +2802,7 @@ void Session::setChatPinned(
 void Session::setPinnedFromEntryList(Dialogs::Key key, bool pinned) {
 	Expects(key.entry()->folderKnown());
 
-	if (!pinned && BearGram::LocalPins::IsLocal(key)) {
+	if (!pinned && BearGram::LocalPins::IsLocalKey(key)) {
 		// BearGram: pinned on this device only, the server knows nothing.
 		BearGram::LocalPins::ScheduleMerge(_session);
 		return;
