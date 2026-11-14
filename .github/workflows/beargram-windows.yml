@@ -235,6 +235,18 @@ jobs:
           else
             echo "tdesktop_rust cache is fine."
           fi
+          # The prune also deletes the sources of the tlottie and wallet-engine
+          # checkouts (Cargo.toml, *.rs) while their stage keys stay, so when a
+          # new release repins them tdesktop_rust can't be built from them
+          # ("failed to read tlottie\Cargo.toml"). They are git clones only,
+          # so a pruned checkout is simply cloned again.
+          for stage in tlottie wallet-engine; do
+            if [ -d "$LibrariesPath/$stage" ] \
+              && [ ! -f "$LibrariesPath/$stage/Cargo.toml" ]; then
+              echo "The $stage checkout was pruned, cloning it again."
+              rm -rf "$LibrariesPath/$stage" "$LibrariesPath/cache_keys/$stage"
+            fi
+          done
 
       # Without skip-release: upstream CI builds Telegram in Debug and builds
       # only Debug libraries, BearGram is built in Release and needs both.
