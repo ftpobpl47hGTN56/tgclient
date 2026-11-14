@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_widget.h"
 
+#include "beargram/beargram_counters.h"
+
 #include "beargram/beargram_updates.h"
 #include "ui/basic_click_handlers.h"
 
@@ -481,6 +483,14 @@ Widget::Widget(
 	_scroll->setOverscrollPullDistances(st::dialogsStoriesFull.height, 0);
 	_innerList = _scroll->setOwnedWidget(
 		object_ptr<Ui::VerticalLayout>(this));
+	if (_layout != Layout::Child) {
+		// BearGram: "📌 ⓬ каналы ⓹ группы ⓸ переписки ⓷" above the list.
+		_innerList->add(BearGram::Counters::CreatePinnedBar(
+			_innerList,
+			&controller->session(),
+			_bearPinnedBarShown.value()));
+		updateBearPinnedBarShown();
+	}
 	_inner = _innerList->add(object_ptr<InnerWidget>(
 		_innerList,
 		controller,
@@ -2463,6 +2473,7 @@ void Widget::changeOpenedForum(Data::Forum *forum, anim::type animated) {
 		_searchWithPostsPreview = computeSearchWithPostsPreview();
 		_api.request(base::take(_topicSearchRequest)).cancel();
 		_inner->changeOpenedForum(forum);
+		updateBearPinnedBarShown();
 		storiesToggleExplicitExpand(false);
 		updateFrozenAccountBar();
 		updateTopBarSuggestions();
@@ -2627,9 +2638,19 @@ void Widget::showSearchInTopBar(anim::type animated) {
 	updateForceDisplayWide();
 }
 
+void Widget::updateBearPinnedBarShown() {
+	_bearPinnedBarShown = (_layout != Layout::Child)
+		&& !_chatsFilterForTopBarSuggestion.current()
+		&& _searchState.query.isEmpty()
+		&& !_openedForum
+		&& !_searchState.community
+		&& !searchInPeer();
+}
+
 void Widget::switchToChatsFilter(FilterId id) {
 	const auto was = _inner->filterId();
 	_chatsFilterForTopBarSuggestion = id;
+	updateBearPinnedBarShown();
 	const auto animated = (was != id)
 		&& !isHidden()
 		&& !_showAnimation
@@ -4390,6 +4411,7 @@ bool Widget::applySearchState(SearchState state) {
 		? peer->owner().history(migrateFrom).get()
 		: nullptr;
 	_searchState = state;
+	updateBearPinnedBarShown();
 	if (inChatChanged && _searchState.inChat && _stories) {
 		storiesExplicitCollapse();
 	}

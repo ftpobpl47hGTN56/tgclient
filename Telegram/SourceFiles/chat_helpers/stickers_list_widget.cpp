@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "chat_helpers/stickers_list_widget.h"
 
+#include "beargram/beargram_counters.h"
+
 #include "base/options.h"
 #include "base/timer_rpl.h"
 #include "core/application.h"
@@ -1885,6 +1887,13 @@ void StickersListWidget::paintStickers(Painter &p, QRect clip) {
 					+ st::stickersFeaturedUnreadSkip
 					+ st::stickersHeaderBadgeFontSkip;
 			}
+			// BearGram: how many stickers are in the pack.
+			const auto bearCount = int(set.stickers.size());
+			const auto bearCountWidth = bearCount
+				? (BearGram::Counters::PillWidth(badgeFont, bearCount)
+					+ st::stickersFeaturedUnreadSkip)
+				: 0;
+			widthForTitle -= bearCountWidth;
 			if (titleWidth > widthForTitle) {
 				titleText = st::stickersTrendingHeaderFont->elided(
 					titleText,
@@ -1899,6 +1908,24 @@ void StickersListWidget::paintStickers(Painter &p, QRect clip) {
 				width(),
 				titleText,
 				titleWidth);
+			if (bearCount) {
+				BearGram::Counters::PaintPill(
+					p,
+					st().headerLeft
+						- st().margin.left()
+						+ titleWidth
+						+ st::stickersFeaturedUnreadSkip
+						+ (amCreator
+							? (badgeWidth
+								+ badgeFont->height
+								+ st::stickersFeaturedUnreadSkip)
+							: 0),
+					info.top + st::stickersHeaderBadgeFontTop - 1,
+					width(),
+					badgeFont,
+					st::windowActiveTextFg->c,
+					bearCount);
+			}
 			if (amCreator) {
 				const auto badgeLeft = st().headerLeft
 					- st().margin.left()

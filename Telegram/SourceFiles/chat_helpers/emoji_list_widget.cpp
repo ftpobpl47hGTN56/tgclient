@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "chat_helpers/emoji_list_widget.h"
 
+#include "beargram/beargram_counters.h"
+
 #include "window/window_media_preview.h"
 #include "api/api_peer_photo.h"
 #include "apiwrap.h"
@@ -2474,6 +2476,13 @@ void EmojiListWidget::paint(
 					+ st::stickersFeaturedUnreadSkip
 					+ st::stickersHeaderBadgeFontSkip;
 			}
+			// BearGram: how many emoji are in the section.
+			const auto bearCount = info.count;
+			if (bearCount) {
+				widthForTitle -= BearGram::Counters::PillWidth(
+					badgeFont,
+					bearCount) + st::stickersFeaturedUnreadSkip;
+			}
 			auto titleWidth = st::emojiPanHeaderFont->width(titleText);
 			if (titleWidth > widthForTitle) {
 				titleText = st::emojiPanHeaderFont->elided(titleText, widthForTitle);
@@ -2524,6 +2533,23 @@ void EmojiListWidget::paint(
 						badgeFont->height),
 					badgeText,
 					style::al_center);
+			}
+			if (bearCount) {
+				BearGram::Counters::PaintPill(
+					p,
+					titleLeft
+						+ titleWidth
+						+ st::stickersFeaturedUnreadSkip
+						+ (badgeText.isEmpty()
+							? 0
+							: (badgeWidth
+								+ badgeFont->height
+								+ st::stickersFeaturedUnreadSkip)),
+					info.top + st::stickersHeaderBadgeFontTop - 1,
+					width(),
+					badgeFont,
+					st::windowActiveTextFg->c,
+					bearCount);
 			}
 		}
 		if (clip.top() + clip.height() > info.rowsTop) {

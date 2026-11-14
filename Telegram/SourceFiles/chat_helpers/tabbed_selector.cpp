@@ -1298,6 +1298,12 @@ void TabbedSelector::createTabsSlider() {
 	_tabsSlider.create(this, _st.tabs);
 
 	fillTabsSliderSections();
+	if (hasGifsTab()) {
+		session().data().stickers().savedGifsUpdated(
+		) | rpl::on_next([=] {
+			fillTabsSliderSections();
+		}, _tabsSlider->lifetime());
+	}
 
 	_tabsSlider->setActiveSectionFast(indexByType(_currentTabType));
 	_tabsSlider->sectionActivated(
@@ -1318,7 +1324,7 @@ void TabbedSelector::fillTabsSliderSections() {
 			? !masks()->mySetsEmpty()
 			: true;
 	}) | ranges::views::transform([&](const Tab &tab) {
-		return [&] {
+		auto result = [&] {
 			switch (tab.type()) {
 			case SelectorTab::Emoji:
 				return tr::lng_switch_emoji;
@@ -1331,6 +1337,15 @@ void TabbedSelector::fillTabsSliderSections() {
 			}
 			Unexpected("SelectorTab value in fillTabsSliderSections.");
 		}()(tr::now);
+		// BearGram: how many GIFs are saved.
+		if (tab.type() == SelectorTab::Gifs) {
+			const auto count = int(
+				session().data().stickers().savedGifs().size());
+			if (count) {
+				result += u" · "_q + QString::number(count);
+			}
+		}
+		return result;
 	}) | ranges::to_vector;
 	_tabsSlider->setSections(sections);
 }

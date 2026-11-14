@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_inner_widget.h"
 
+#include "beargram/beargram_chat_selection.h"
+
 #include "dialogs/dialogs_three_state_icon.h"
 #include "dialogs/ui/chat_search_empty.h"
 #include "dialogs/ui/chat_search_in.h"
@@ -341,6 +343,12 @@ InnerWidget::InnerWidget(
 	session().downloaderTaskFinished(
 	) | rpl::on_next([=] {
 		invalidateLoadedUserpics();
+		update();
+	}, lifetime());
+
+	// BearGram: repaint the marks of the selected chats.
+	BearGram::ChatSelection::Changes(
+	) | rpl::on_next([=] {
 		update();
 	}, lifetime());
 
@@ -1260,6 +1268,18 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 			paintCachedRowOverlays(p, row, cacheKey, context);
 		} else {
 			Ui::RowPainter::Paint(p, row, videoUserpic, context);
+		}
+		// BearGram: the chats selected with "Выделить".
+		if (history && BearGram::ChatSelection::Contains(history)) {
+			BearGram::ChatSelection::PaintMark(
+				p,
+				context.width,
+				row->height(),
+				QRect(
+					context.st->padding.left(),
+					context.st->padding.top(),
+					context.st->photoSize,
+					context.st->photoSize));
 		}
 		if (context.quickActionContext) {
 			context.quickActionContext = nullptr;

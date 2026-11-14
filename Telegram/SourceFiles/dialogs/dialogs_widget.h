@@ -379,6 +379,9 @@ private:
 	rpl::event_stream<> _prepareTopBarSnapshot;
 	rpl::variable<bool> _openedFolderOrForum;
 	rpl::variable<FilterId> _chatsFilterForTopBarSuggestion;
+	// BearGram: pinned chats counters above the main chats list.
+	rpl::variable<bool> _bearPinnedBarShown = false;
+	void updateBearPinnedBarShown();
 
 	object_ptr<Ui::ElasticScroll> _scroll;
 	Ui::VerticalLayout *_innerList = nullptr;

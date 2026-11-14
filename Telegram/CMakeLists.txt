@@ -260,6 +260,10 @@ PRIVATE
     api/api_who_reacted.h
     beargram/beargram_account_transfer.cpp
     beargram/beargram_account_transfer.h
+    beargram/beargram_chat_selection.cpp
+    beargram/beargram_chat_selection.h
+    beargram/beargram_counters.cpp
+    beargram/beargram_counters.h
     beargram/beargram_deleted_log.cpp
     beargram/beargram_deleted_log.h
     beargram/beargram_equalizer.cpp

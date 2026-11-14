@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
 
+#include "beargram/beargram_chat_selection.h"
 #include "beargram/beargram_local_pins.h"
 
 #include "beargram/beargram_deleted_log.h"
@@ -2008,11 +2009,156 @@ void Filler::addVideoChat() {
 	});
 }
 
+// BearGram: the menu of a chat selected with "Выделить", for all of them.
+void FillBearGramSelectionMenu(
+		not_null<SessionController*> controller,
+		not_null<History*> clicked,
+		const PeerMenuCallback &addAction) {
+	using namespace BearGram::ChatSelection;
+	const auto list = List();
+	const auto count = int(list.size());
+	const auto suffix = u" (%1)"_q.arg(count);
+	const auto settings = &clicked->owner().notifySettings();
+
+	const auto pin = ranges::any_of(list, [](not_null<History*> history) {
+		return !history->isPinnedDialog(FilterId());
+	});
+	addAction((pin ? u"Закрепить"_q : u"Открепить"_q) + suffix, [=] {
+		for (const auto history : List()) {
+			if (history->isPinnedDialog(FilterId()) != pin) {
+				TogglePinnedThread(controller, history, FilterId(), nullptr);
+			}
+		}
+	}, pin ? &st::menuIconPin : &st::menuIconUnpin);
+
+	const auto mute = ranges::any_of(list, [=](not_null<History*> history) {
+		return !settings->isMuted(history);
+	});
+	addAction((mute
+		? u"Выключить уведомления"_q
+		: u"Включить уведомления"_q) + suffix, [=] {
+		for (const auto history : List()) {
+			history->owner().notifySettings().update(history, mute
+				? Data::MuteValue{ .forever = true }
+				: Data::MuteValue{ .unmute = true });
+		}
+	}, mute ? &st::menuIconMute : &st::menuIconUnmute);
+
+	const auto silence = ranges::any_of(list, [=](not_null<History*> h) {
+		return !settings->sound(h).none;
+	});
+	addAction((silence ? u"Без звука"_q : u"Со звуком"_q) + suffix, [=] {
+		for (const auto history : List()) {
+			auto &notify = history->owner().notifySettings();
+			auto sound = notify.sound(history);
+			sound.none = silence;
+			notify.update(history, {}, {}, sound);
+		}
+	}, silence ? &st::menuIconSoundOff : &st::menuIconSoundOn);
+
+	addAction(u"Отметить прочитанными"_q + suffix, [=] {
+		for (const auto history : List()) {
+			if (MarkAsReadMenu::IsUnreadThread(history)) {
+				MarkAsReadMenu::MarkAsReadThread(history);
+			}
+		}
+	}, &st::menuIconMarkRead);
+
+	const auto archive = ranges::any_of(list, [](not_null<History*> h) {
+		return !h->folder();
+	});
+	addAction((archive ? u"В архив"_q : u"Из архива"_q) + suffix, [=] {
+		for (const auto history : List()) {
+			if ((history->folder() != nullptr) != archive
+				&& !history->peer->isSelf()) {
+				history->session().api().toggleHistoryArchived(
+					history,
+					archive,
+					nullptr);
+			}
+		}
+	}, archive ? &st::menuIconArchive : &st::menuIconUnarchive);
+
+	addAction(u"Убрать из выделения"_q, [=] {
+		Toggle(clicked);
+	}, &st::menuIconSelect);
+	addAction(u"Снять выделение"_q, [] {
+		Clear();
+	}, &st::menuIconCancel);
+
+	addAction(PeerMenuCallback::Args{ .isSeparator = true });
+	addAction({
+		.text = u"Покинуть / удалить"_q + suffix,
+		.handler = [=] {
+			controller->show(Ui::MakeConfirmBox({
+				.text = u"Покинуть выделенные каналы и группы и удалить "
+					"выделенные переписки (%1)? Свои каналы и группы "
+					"остаются, их удаляют из профиля."_q.arg(Count()),
+				.confirmed = [=](Fn<void()> close) {
+					for (const auto history : List()) {
+						const auto peer = history->peer;
+						auto &api = peer->session().api();
+						if (const auto channel = peer->asChannel()) {
+							if (channel->amIn() && !channel->amCreator()) {
+								api.leaveChannel(channel);
+							}
+						} else if (const auto chat = peer->asChat()) {
+							if (!chat->amCreator()) {
+								api.deleteConversation(peer, false);
+							}
+						} else if (!peer->isSelf()) {
+							api.deleteConversation(peer, false);
+						}
+					}
+					Clear();
+					close();
+				},
+				.confirmText = u"Покинуть / удалить"_q,
+				.confirmStyle = &st::attentionBoxButton,
+			}));
+		},
+		.icon = &st::menuIconDeleteAttention,
+		.isAttention = true,
+	});
+}
+
+// BearGram: "Выделить", mute and sound toggles in the chats list menu.
+void AddBearGramChatActions(
+		not_null<History*> history,
+		const PeerMenuCallback &addAction) {
+	if (history->peer->isSelf() || history->isForum()) {
+		return;
+	}
+	const auto settings = &history->owner().notifySettings();
+	const auto muted = settings->isMuted(history);
+	addAction(muted
+		? u"Включить уведомления"_q
+		: u"Выключить уведомления"_q, [=] {
+		settings->update(history, muted
+			? Data::MuteValue{ .unmute = true }
+			: Data::MuteValue{ .forever = true });
+	}, muted ? &st::menuIconUnmute : &st::menuIconMute);
+	const auto silent = settings->sound(history).none;
+	addAction(silent ? u"Со звуком"_q : u"Без звука"_q, [=] {
+		auto sound = settings->sound(history);
+		sound.none = !silent;
+		settings->update(history, {}, {}, sound);
+	}, silent ? &st::menuIconSoundOn : &st::menuIconSoundOff);
+	const auto selected = BearGram::ChatSelection::Contains(history);
+	addAction(selected ? u"Убрать из выделения"_q : u"Выделить"_q, [=] {
+		BearGram::ChatSelection::Toggle(history);
+	}, &st::menuIconSelect);
+}
+
 void Filler::fillContextMenuActions() {
 	const auto history = _request.key.history();
 	const auto channel = history ? history->peer->asChannel() : nullptr;
 	if (channel && !channel->amIn() && !history->inChatList()) {
 		addNewWindow(false);
+		return;
+	}
+	if (history && BearGram::ChatSelection::Contains(history)) {
+		FillBearGramSelectionMenu(_controller, history, _addAction);
 		return;
 	}
 	addNewWindow();
@@ -2024,14 +2170,15 @@ void Filler::fillContextMenuActions() {
 		addInfo();
 	}
 	addToggleMuteSubmenu(false);
+	if (history) {
+		AddBearGramChatActions(history, _addAction);
+	}
 	addToggleUnreadMark();
 	addToggleTopicClosed();
 	addToggleFolder();
-	if (const auto user = _peer->asUser()) {
-		if (!user->isContact()) {
-			addBlockUser();
-		}
-	}
+	// BearGram: block and report right in the chats list menu.
+	addBlockUser();
+	addReport();
 	addBanFromChannel();
 	addClearHistory();
 	addDeleteChat();
@@ -2059,6 +2206,7 @@ void Filler::fillHistoryActions() {
 	addBearGramNickname();
 	addBearGramLogToggle();
 	addBearGramWallpaper();
+	addBlockUser(); // BearGram: no need to open the profile for it.
 	addReport();
 	addClearHistory();
 	addDeleteChat();
