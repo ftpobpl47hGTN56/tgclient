@@ -221,6 +221,7 @@ int PaintBadges(
 	};
 	auto initial = right;
 	auto painted = 0;
+	auto pinPainted = false;
 	if (badgesState.unread
 		&& !badgesState.unreadCounter
 		&& context.st->unreadMarkDiameter > 0) {
@@ -268,6 +269,7 @@ int PaintBadges(
 			context.selected);
 		PaintPinnedIcon(p, icon, right - icon.width(), pinnedIconTop, context.width);
 		right -= icon.width() + st::dialogsUnreadPadding;
+		pinPainted = true;
 	}
 	if ((!narrow || (painted < 2))
 		&& (badgesState.mention || badgesState.reaction)) {
@@ -308,6 +310,16 @@ int PaintBadges(
 			badgesState.pollMuted,
 			UnreadBadgeSize::PollInDialogs);
 		++painted;
+	}
+	// BearGram: the pin of a pinned chat stays visible with unread
+	// messages, to the left of the counters.
+	if (displayPinnedIcon && !pinPainted && !narrow && painted > 0) {
+		const auto &icon = ThreeStateIcon(
+			st::dialogsPinnedIcon,
+			context.active,
+			context.selected);
+		PaintPinnedIcon(p, icon, right - icon.width(), pinnedIconTop, context.width);
+		right -= icon.width() + st::dialogsUnreadPadding;
 	}
 	return (initial - right);
 }
@@ -1192,8 +1204,8 @@ void RowPainter::Paint(
 		const auto draftDate = cloudDraft ? cloudDraft->date : TimeId(0);
 		return std::max(itemDate, draftDate);
 	}();
-	const auto displayPinnedIcon = badgesState.empty()
-		&& entry->isPinnedDialog(context.filter)
+	// BearGram: with unread messages too, see PaintBadges.
+	const auto displayPinnedIcon = entry->isPinnedDialog(context.filter)
 		&& (context.filter || !entry->fixedOnTopIndex());
 
 	const auto from = history
