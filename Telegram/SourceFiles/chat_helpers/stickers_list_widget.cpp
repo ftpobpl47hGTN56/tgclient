@@ -3577,7 +3577,7 @@ void StickersListWidget::refreshFavedStickers() {
 		Data::Stickers::FavedSetId,
 		nullptr,
 		(SetFlag::Official | SetFlag::Special),
-		Lang::Hard::FavedSetTitle(),
+		u"Избранные"_q, // BearGram: shown as the section title now.
 		shortName,
 		set->count,
 		externalLayout,
@@ -3822,9 +3822,11 @@ void StickersListWidget::updateSelected() {
 bool StickersListWidget::setHasTitle(const Set &set) const {
 	if (_isEffects) {
 		return true;
-	} else if (set.id == Data::Stickers::FavedSetId
-		|| set.id == SearchEmojiSectionSetId()) {
+	} else if (set.id == SearchEmojiSectionSetId()) {
 		return false;
+	} else if (set.id == Data::Stickers::FavedSetId) {
+		// BearGram: "Избранные" with the counter, as in other sections.
+		return !_isMasks;
 	} else if (set.id == Data::Stickers::RecentSetId) {
 		return !_mySets.empty()
 			&& (_isMasks || (_mySets[0].id == Data::Stickers::FavedSetId));
