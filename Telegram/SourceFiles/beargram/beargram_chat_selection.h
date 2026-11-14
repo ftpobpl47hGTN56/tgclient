@@ -28,12 +28,14 @@ void Clear();
 // Fired on every change, the chats list repaints the marks.
 [[nodiscard]] rpl::producer<> Changes();
 
-// The mark of a selected row: a tint over the row and a check on the
-// userpic. The painter is at the top left corner of the row.
+// The mark of a row while chats are selected: a selected row gets a tint
+// and a check on the userpic, the others an empty circle to click. The
+// painter is at the top left corner of the row.
 void PaintMark(
 	QPainter &p,
 	int width,
 	int height,
-	QRect userpic);
+	QRect userpic,
+	bool selected);
 
 } // namespace BearGram::ChatSelection

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "dialogs/dialogs_widget.h"
 
+#include "beargram/beargram_chat_selection.h"
 #include "beargram/beargram_counters.h"
 
 #include "beargram/beargram_updates.h"
@@ -3172,6 +3173,11 @@ void Widget::escape() {
 }
 
 void Widget::escape(CancelSearchOptions options) {
+	// BearGram: Esc leaves the chats selection first.
+	if (BearGram::ChatSelection::Count() > 0) {
+		BearGram::ChatSelection::Clear();
+		return;
+	}
 	if (!cancelSearch(options)) {
 		if (const auto forum = controller()->shownForum().current()) {
 			const auto id = controller()->windowId();

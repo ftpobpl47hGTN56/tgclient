@@ -87,11 +87,18 @@ rpl::producer<> Changes() {
 	return Instance().changes.events();
 }
 
-void PaintMark(QPainter &p, int width, int height, QRect userpic) {
+void PaintMark(
+		QPainter &p,
+		int width,
+		int height,
+		QRect userpic,
+		bool selected) {
 	auto hq = PainterHighQualityEnabler(p);
-	auto tint = st::windowBgActive->c;
-	tint.setAlphaF(0.16);
-	p.fillRect(0, 0, width, height, tint);
+	if (selected) {
+		auto tint = st::windowBgActive->c;
+		tint.setAlphaF(0.16);
+		p.fillRect(0, 0, width, height, tint);
+	}
 
 	const auto size = std::max(userpic.width() * 2 / 5, 16);
 	const auto stroke = std::max(size / 9., 1.5);
@@ -100,6 +107,13 @@ void PaintMark(QPainter &p, int width, int height, QRect userpic) {
 		userpic.y() + userpic.height() - size + stroke,
 		size - stroke,
 		size - stroke);
+	if (!selected) {
+		// An empty checkbox: a white circle with a gray ring.
+		p.setPen(QPen(st::windowSubTextFg->c, stroke));
+		p.setBrush(st::windowBg->c);
+		p.drawEllipse(check);
+		return;
+	}
 	p.setPen(QPen(st::windowBg->c, stroke));
 	p.setBrush(st::windowBgActive->c);
 	p.drawEllipse(check);

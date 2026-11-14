@@ -2130,14 +2130,13 @@ void AddBearGramChatActions(
 		return;
 	}
 	const auto settings = &history->owner().notifySettings();
-	const auto muted = settings->isMuted(history);
-	addAction(muted
-		? u"Включить уведомления"_q
-		: u"Выключить уведомления"_q, [=] {
-		settings->update(history, muted
-			? Data::MuteValue{ .unmute = true }
-			: Data::MuteValue{ .forever = true });
-	}, muted ? &st::menuIconUnmute : &st::menuIconMute);
+	// A muted chat has "Включить уведомления" in the menu already, the
+	// mute submenu above has periods, here it is muted at once.
+	if (!settings->isMuted(history)) {
+		addAction(u"Выключить уведомления навсегда"_q, [=] {
+			settings->update(history, Data::MuteValue{ .forever = true });
+		}, &st::menuIconMute);
+	}
 	const auto silent = settings->sound(history).none;
 	addAction(silent ? u"Со звуком"_q : u"Без звука"_q, [=] {
 		auto sound = settings->sound(history);

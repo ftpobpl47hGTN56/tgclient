@@ -1269,8 +1269,9 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 		} else {
 			Ui::RowPainter::Paint(p, row, videoUserpic, context);
 		}
-		// BearGram: the chats selected with "Выделить".
-		if (history && BearGram::ChatSelection::Contains(history)) {
+		// BearGram: the chats selected with "Выделить", while some are
+		// selected every chat gets an empty check to click.
+		if (history && BearGram::ChatSelection::Count() > 0) {
 			BearGram::ChatSelection::PaintMark(
 				p,
 				context.width,
@@ -1279,7 +1280,8 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 					context.st->padding.left(),
 					context.st->padding.top(),
 					context.st->photoSize,
-					context.st->photoSize));
+					context.st->photoSize),
+				BearGram::ChatSelection::Contains(history));
 		}
 		if (context.quickActionContext) {
 			context.quickActionContext = nullptr;
@@ -6052,6 +6054,16 @@ bool InnerWidget::chooseRow(
 		return row;
 	};
 	auto chosen = modifyChosenRow(computeChosenRow(), modifiers);
+	// BearGram: while chats are selected a click checks / unchecks a chat
+	// instead of opening it.
+	if (chosen.key
+		&& !chosen.message.fullId
+		&& BearGram::ChatSelection::Count() > 0) {
+		if (const auto history = chosen.key.history()) {
+			BearGram::ChatSelection::Toggle(history);
+			return true;
+		}
+	}
 	if (chosen.key) {
 		if (IsServerMsgId(chosen.message.fullId.msg)) {
 			session().local().saveRecentSearchHashtags(_filter);
