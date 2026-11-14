@@ -48,17 +48,29 @@ struct State {
 	return result;
 }
 
-[[nodiscard]] QString FilePath() {
+// The pins are kept in the BearGram settings file, under "pins".
+[[nodiscard]] QString SettingsPath() {
+	return cWorkingDir() + u"tdata/beargram.json"_q;
+}
+
+// Before: a separate file, read once if the settings have no pins yet.
+[[nodiscard]] QString OldFilePath() {
 	return cWorkingDir() + u"tdata/beargram_pins.json"_q;
+}
+
+[[nodiscard]] QJsonObject ReadObject(const QString &path) {
+	auto file = QFile(path);
+	return file.open(QIODevice::ReadOnly)
+		? QJsonDocument::fromJson(file.readAll()).object()
+		: QJsonObject();
 }
 
 void Load(State &state) {
 	state.loaded = true;
-	auto file = QFile(FilePath());
-	if (!file.open(QIODevice::ReadOnly)) {
-		return;
+	auto root = ReadObject(SettingsPath()).value(u"pins"_q).toObject();
+	if (root.isEmpty()) {
+		root = ReadObject(OldFilePath());
 	}
-	const auto root = QJsonDocument::fromJson(file.readAll()).object();
 	for (auto i = root.begin(); i != root.end(); ++i) {
 		const auto userId = i.key().toULongLong();
 		if (!userId) {
@@ -110,10 +122,15 @@ void Save(const State &state) {
 			{ u"order"_q, orders },
 		});
 	}
-	auto file = QSaveFile(FilePath());
+	// The rest of the settings file stays as it is.
+	auto settings = ReadObject(SettingsPath());
+	settings.insert(u"pins"_q, root);
+	auto file = QSaveFile(SettingsPath());
 	if (file.open(QIODevice::WriteOnly)) {
-		file.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-		file.commit();
+		file.write(QJsonDocument(settings).toJson(QJsonDocument::Indented));
+		if (file.commit()) {
+			QFile::remove(OldFilePath());
+		}
 	}
 }
 

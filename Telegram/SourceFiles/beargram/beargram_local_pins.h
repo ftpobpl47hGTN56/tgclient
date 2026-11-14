@@ -22,18 +22,17 @@ class Key;
 
 // Pinned chats without the server limit (5, 10 with Premium).
 //
-// A chat is pinned on the server as usual. When the server refuses it
-// (PINNED_DIALOGS_TOO_MUCH) the chat stays pinned here only, as a "local"
-// pin of this device:
+// Every chat pinned on this device is kept here as a "local" pin, whatever
+// the server answers (it keeps only its limit and may not say so):
 // - the server lists of pinned chats (startup, other devices) are merged
 //   with the local pins instead of replacing them;
 // - the order the chats were dragged to is kept on this device, the server
-//   gets the order of its own pins only;
-// - unpinning a local pin removes it here.
+//   gets the top chats within its limit;
+// - unpinning a chat here removes it.
 //
-// Kept per account in tdata/beargram_pins.json, with the access hashes of
-// the chats, so a chat far down the list is loaded and pinned right after
-// the start.
+// Kept per account in the BearGram settings file tdata/beargram.json under
+// "pins", with the access hashes of the chats, so a chat far down the list
+// is loaded and pinned right after the start.
 namespace BearGram::LocalPins {
 
 // The pinned list limit in the main list and in the archive.

@@ -67,7 +67,14 @@ constexpr auto kMaxLines = 200;
 }
 
 void Save(const Settings &settings) {
-	auto object = QJsonObject();
+	// Other parts of BearGram keep their own keys here (pinned chats),
+	// they are left as they are.
+	auto object = [] {
+		auto file = QFile(SettingsPath());
+		return file.open(QIODevice::ReadOnly)
+			? QJsonDocument::fromJson(file.readAll()).object()
+			: QJsonObject();
+	}();
 	object.insert(u"collapseLongMessages"_q, settings.collapseLongMessages);
 	object.insert(u"collapseAfterLines"_q, settings.collapseAfterLines);
 	object.insert(u"hideBlockedUsers"_q, settings.hideBlockedUsers);

@@ -454,8 +454,11 @@ void TogglePinnedThread(
 
 	owner->setChatPinned(entry, FilterId(), isPinned);
 	if (const auto history = entry->asHistory()) {
-		// BearGram: pins over the server limit stay on this device.
-		if (!isPinned) {
+		// BearGram: every pin made here is kept on this device, the
+		// server keeps its 5 (10 with Premium) whatever it answers.
+		if (isPinned) {
+			BearGram::LocalPins::AddLocal(history);
+		} else {
 			BearGram::LocalPins::RemoveLocal(history);
 		}
 		BearGram::LocalPins::RememberOrder(
@@ -472,24 +475,12 @@ void TogglePinnedThread(
 			MTP_flags(flags),
 			peer
 		)).done([=] {
-			if (isPinned) {
-				// Pinned on the server now, not a local pin anymore.
-				BearGram::LocalPins::RemoveLocal(history);
-			}
 			owner->notifyPinnedDialogsOrderUpdated();
 			if (onToggled) {
 				onToggled();
 			}
-		}).fail([=](const MTP::Error &error) {
-			// PINNED_DIALOGS_TOO_MUCH: over the limit, pinned here only.
-			if (isPinned
-				&& error.type().startsWith(u"PINNED_"_q)
-				&& history->isPinnedDialog(FilterId())) {
-				BearGram::LocalPins::AddLocal(history);
-				BearGram::LocalPins::RememberOrder(
-					&history->session(),
-					history->folder());
-			}
+		}).fail([=] {
+			// Over the server limit: still pinned here, see above.
 			if (onToggled) {
 				onToggled();
 			}

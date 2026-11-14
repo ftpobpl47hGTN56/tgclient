@@ -435,12 +435,24 @@ void ApiWrap::checkFilterInvite(
 }
 
 void ApiWrap::savePinnedOrder(Data::Folder *folder) {
-	// BearGram: the order is kept here, the server gets its own pins only.
+	// BearGram: the whole order is kept here, the server gets the top
+	// chats within its limit (5, 10 with Premium).
 	BearGram::LocalPins::RememberOrder(_session, folder);
-	auto order = _session->data().pinnedChatsOrder(folder);
-	order.erase(ranges::remove_if(order, [](const Dialogs::Key &key) {
-		return BearGram::LocalPins::IsLocalKey(key);
-	}), end(order));
+	auto order = std::vector<Dialogs::Key>();
+	{
+		const auto limits = Data::PremiumLimits(_session);
+		auto left = folder
+			? limits.dialogsFolderPinnedCurrent()
+			: limits.dialogsPinnedCurrent();
+		for (const auto &key : _session->data().pinnedChatsOrder(folder)) {
+			if (!key.history()) {
+				order.push_back(key);
+			} else if (left > 0) {
+				order.push_back(key);
+				--left;
+			}
+		}
+	}
 	const auto input = [](Dialogs::Key key) {
 		if (const auto history = key.history()) {
 			if (const auto channel = history->peer->asChannel()
