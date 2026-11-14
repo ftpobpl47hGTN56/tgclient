@@ -36,6 +36,10 @@ int PaintPill(
 	const QColor &color,
 	int count);
 
+// A yellow line under the title of a stickers / emoji pack, between the
+// packs, y is its middle.
+void PaintSeparator(QPainter &p, int left, int right, int y);
+
 // "Закреплено: каналы ⓹ группы ⓸ переписки ⓷" above the chats list.
 // Its height is 0 while nothing is pinned in the main list or not shown
 // (another folder, search, a forum).

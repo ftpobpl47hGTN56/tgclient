@@ -2534,6 +2534,12 @@ void EmojiListWidget::paint(
 					badgeText,
 					style::al_center);
 			}
+			// BearGram: a yellow line between the title and the emoji.
+			BearGram::Counters::PaintSeparator(
+				p,
+				titleLeft,
+				emojiRight(),
+				(top + st::emojiPanHeaderFont->height + info.rowsTop) / 2);
 			if (bearCount) {
 				BearGram::Counters::PaintPill(
 					p,

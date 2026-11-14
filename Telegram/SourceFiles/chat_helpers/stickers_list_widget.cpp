@@ -1908,6 +1908,15 @@ void StickersListWidget::paintStickers(Painter &p, QRect clip) {
 				width(),
 				titleText,
 				titleWidth);
+			// BearGram: a yellow line between the title and the stickers.
+			BearGram::Counters::PaintSeparator(
+				p,
+				st().headerLeft - st().margin.left(),
+				stickersRight(),
+				(info.top
+					+ st().headerTop
+					+ st::emojiPanHeaderFont->height
+					+ info.rowsTop) / 2);
 			if (bearCount) {
 				BearGram::Counters::PaintPill(
 					p,

@@ -89,6 +89,19 @@ int PaintPill(
 	return width;
 }
 
+void PaintSeparator(QPainter &p, int left, int right, int y) {
+	if (right <= left) {
+		return;
+	}
+	auto hq = PainterHighQualityEnabler(p);
+	const auto line = style::ConvertScaleExact(1.5);
+	auto pen = QPen(QColor(0xF5, 0xC5, 0x18, 0xD0));
+	pen.setWidthF(line);
+	pen.setCapStyle(Qt::RoundCap);
+	p.setPen(pen);
+	p.drawLine(QPointF(left + line, y), QPointF(right - line, y));
+}
+
 object_ptr<Ui::RpWidget> CreatePinnedBar(
 		QWidget *parent,
 		not_null<Main::Session*> session,
