@@ -16,7 +16,7 @@ struct Settings {
 	bool hideAdPosts = true;
 	bool hideNoCommentsPosts = true;
 	bool hideSponsored = false;
-	int maxAccounts = 15;
+	int maxAccounts = 100;
 	// Deleted messages logger, see BearGram::LogMode.
 	int logPrivateMode = 1;
 	int logGroupsMode = 1;
@@ -24,7 +24,7 @@ struct Settings {
 	bool checkUpdates = true;
 };
 
-inline constexpr auto kMaxAccountsLimit = 15;
+inline constexpr auto kMaxAccountsLimit = 100;
 
 [[nodiscard]] const Settings &Current();
 void Update(Fn<void(Settings&)> change);

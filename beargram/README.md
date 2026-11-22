@@ -35,7 +35,7 @@ Settings > BearGram and are stored in `tdata/beargram.json`.
   всё от ..." for a sender in groups and channels' comments.
 
 - Optional hiding of Telegram sponsored messages (`SponsoredMessages::canHaveFor`).
-- Account limit 1..15 as a slider (`Settings::maxAccounts`, `Domain::maxAccounts`).
+- Account limit 1..100 as a slider (`Settings::maxAccounts`, `Domain::maxAccounts`).
 - "Читать полностью" for long messages (`beargram_read_full`).
 - Local names of users (`beargram_nicknames`, `UserData::setName`,
   `PeerData::shortName`), menu item "Локальное имя" in chat and profile menus.
