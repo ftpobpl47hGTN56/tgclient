@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/random.h"
 #include "base/unixtime.h"
+#include "base/weak_ptr.h"
 #include "core/application.h"
 #include "core/file_utilities.h"
 #include "data/data_user.h"
@@ -27,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/vertical_layout.h"
+#include "window/window_controller.h"
 #include "styles/style_boxes.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
@@ -473,18 +475,28 @@ void ImportPasswordBox(
 	const auto password = AddPasswordField(box, u"Пароль файла"_q);
 	box->setFocusCallback([=] { password->setFocusFast(); });
 	box->addButton(rpl::single(u"Импортировать"_q), [=] {
+		const auto weak = base::make_weak(box);
 		const auto result = Import(content, password->getLastText());
 		if (result.wrongPassword) {
 			password->showError();
 			box->showToast(u"Неверный пароль."_q);
 			return;
 		}
-		const auto show = box->uiShow();
-		box->closeBox();
-		show->show(Ui::MakeInformBox({
+		auto box = Ui::MakeInformBox({
 			.text = ResultText(result),
 			.title = rpl::single(u"Импорт аккаунтов"_q),
-		}));
+		});
+		// Import could synchronously activate an imported account on the
+		// welcome screen, destroying this box's whole layer stack.
+		if (!weak) {
+			if (const auto window = Core::App().activeWindow()) {
+				window->uiShow()->show(std::move(box));
+			}
+			return;
+		}
+		const auto show = weak->uiShow();
+		weak->closeBox();
+		show->show(std::move(box));
 	});
 	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
 }
