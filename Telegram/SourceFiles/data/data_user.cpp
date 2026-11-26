@@ -531,6 +531,7 @@ void UserData::setBotInfo(const MTPBotInfo &info) {
 			botInfo.get(),
 			d.vmenu_button());
 		botInfo->inited = true;
+		botInfo->hasPreviewMedias = d.is_has_preview_medias();
 
 		const auto privacy = qs(d.vprivacy_policy_url().value_or_empty());
 		const auto privacyChanged = (botInfo->privacyPolicyUrl != privacy);
@@ -658,6 +659,10 @@ bool UserData::isFake() const {
 
 bool UserData::isPremium() const {
 	return flags() & UserDataFlag::Premium;
+}
+
+bool UserData::isBotInlineGeo() const {
+	return flags() & UserDataFlag::BotInlineGeo;
 }
 
 bool UserData::isBot() const {
@@ -830,6 +835,18 @@ bool UserData::isContact() const {
 	return (contactStatus() == ContactStatus::Contact);
 }
 
+bool UserData::isCloseFriend() const {
+	return (flags() & UserDataFlag::CloseFriend);
+}
+
+void UserData::setIsCloseFriend(bool is) {
+	if (is) {
+		addFlags(UserDataFlag::CloseFriend);
+	} else {
+		removeFlags(UserDataFlag::CloseFriend);
+	}
+}
+
 UserData::CallsStatus UserData::callsStatus() const {
 	return _callsStatus;
 }
@@ -930,6 +947,9 @@ void ApplyUserUpdate(
 		user->setBotInfo(*info);
 	} else {
 		user->setBotInfoVersion(-1);
+		if (const auto info = user->botInfo.get()) {
+			info->hasPreviewMedias = false;
+		}
 	}
 	if (const auto info = user->botInfo.get()) {
 		info->canManageEmojiStatus = update.is_bot_can_manage_emoji_status();
