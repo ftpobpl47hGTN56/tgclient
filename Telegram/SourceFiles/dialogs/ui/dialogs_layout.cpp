@@ -894,12 +894,13 @@ void PaintRow(
 				st::dialogsPinnedIcon,
 				context.active,
 				context.selected);
-			PaintPinnedIcon(
-				p,
-				context.width - context.st->padding.right() - icon.width(),
-				texttop,
-				context.width);
-		} 
+		PaintPinnedIcon(
+			p,
+			icon,
+			context.width - context.st->padding.right() - icon.width(),
+			texttop,
+			context.width);
+	} 
 	}
 	const auto sendStateIcon = [&]() -> const style::icon* {
 		if (!thread) {

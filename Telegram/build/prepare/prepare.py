@@ -2067,9 +2067,21 @@ mac:
 """)
 
 if win:
-    currentCodePage = subprocess.run('chcp', capture_output=True, shell=True, text=True, env=modifiedEnv).stdout.strip().split()[-1]
+    cp_out = subprocess.run(
+        'chcp',
+        capture_output=True,
+        shell=True,
+        text=True,
+        encoding='cp866',
+        errors='replace',
+        env=modifiedEnv,
+    ).stdout or ''
+    parts = cp_out.strip().split()
+    currentCodePage = parts[-1] if parts else '866'
     subprocess.run('chcp 65001 > nul', shell=True, env=modifiedEnv)
-    runStages()
-    subprocess.run('chcp ' + currentCodePage + ' > nul', shell=True, env=modifiedEnv)
+    try:
+        runStages()
+    finally:
+        subprocess.run('chcp ' + currentCodePage + ' > nul', shell=True, env=modifiedEnv)
 else:
     runStages()
