@@ -1,0 +1,85 @@
+diff --git a/Telegram/CMakeLists.txt b/Telegram/CMakeLists.txt
+index 917e8bfd42..fdd42ff5f2 100644
+--- a/Telegram/CMakeLists.txt
++++ b/Telegram/CMakeLists.txt
+@@ -127,6 +127,15 @@ if (NOT DESKTOP_APP_DISABLE_SWIFT6)
+     telegram_add_apple_swift_runtime(Telegram)
+ endif()
+ 
++# BearGram: the cloud build number for the update check. Set on one file
++# only, so a new number doesn't rebuild everything.
++if (BEARGRAM_BUILD_NUMBER)
++    set_source_files_properties(${src_loc}/beargram/beargram_updates.cpp
++    PROPERTIES
++        COMPILE_DEFINITIONS BEARGRAM_BUILD_NUMBER=${BEARGRAM_BUILD_NUMBER}
++    )
++endif()
++
+ target_precompile_headers(Telegram PRIVATE $<$<COMPILE_LANGUAGE:CXX,OBJCXX>:${src_loc}/stdafx.h>)
+ nice_target_sources(Telegram ${src_loc}
+ PRIVATE
+@@ -259,6 +268,41 @@ PRIVATE
+     api/api_websites.h
+     api/api_who_reacted.cpp
+     api/api_who_reacted.h
++    beargram/beargram_account_transfer.cpp
++    beargram/beargram_account_transfer.h
++    beargram/beargram_chat_selection.cpp
++    beargram/beargram_chat_selection.h
++    beargram/beargram_counters.cpp
++    beargram/beargram_counters.h
++    beargram/beargram_deleted_log.cpp
++    beargram/beargram_deleted_log.h
++    beargram/beargram_equalizer.cpp
++    beargram/beargram_equalizer.h
++    beargram/beargram_filters.cpp
++    beargram/beargram_filters.h
++    beargram/beargram_local_hide.cpp
++    beargram/beargram_nicknames.cpp
++    beargram/beargram_nicknames.h
++    beargram/beargram_peer_info.cpp
++    beargram/beargram_peer_info.h
++    beargram/beargram_post_filter.cpp
++    beargram/beargram_post_filter.h
++    beargram/beargram_post_filter_box.cpp
++    beargram/beargram_read_full.cpp
++    beargram/beargram_read_full.h
++    beargram/beargram_wallpapers.cpp
++    beargram/beargram_wallpapers.h
++    beargram/beargram_local_hide.h
++    beargram/beargram_local_pins.cpp
++    beargram/beargram_local_pins.h
++    beargram/beargram_long_messages.cpp
++    beargram/beargram_long_messages.h
++    beargram/beargram_settings.cpp
++    beargram/beargram_settings.h
++    beargram/beargram_settings_box.cpp
++    beargram/beargram_settings_box.h
++    beargram/beargram_updates.cpp
++    beargram/beargram_updates.h
+     boxes/filters/edit_filter_box.cpp
+     boxes/filters/edit_filter_box.h
+     boxes/filters/edit_filter_chats_list.cpp
+@@ -2862,6 +2906,13 @@ if (WIN32)
+             "Copying d3dcompiler_47.dll for ANGLE."
+         VERBATIM
+         )
++
++    endif()
++
++    target_link_options(Telegram PRIVATE /PDBPAGESIZE:16384)
++
++    if (DESKTOP_APP_WIN7_BASELINE) 
++ 
+         # The loader reads the subsystem version as the minimal Windows.
+         target_link_options(Telegram PRIVATE /SUBSYSTEM:WINDOWS,6.01)
+     endif()
+@@ -2987,7 +3038,7 @@ else()
+         set(bundle_identifier "com.tdesktop.Telegram")
+     endif()
+     set(bundle_entitlements "Telegram.entitlements")
+-    set(output_name "Telegram")
++    set(output_name "BearGram")
+ endif()
+ 
+ if (CMAKE_GENERATOR STREQUAL Xcode)

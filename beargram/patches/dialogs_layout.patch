@@ -1,0 +1,146 @@
+diff --git a/Telegram/SourceFiles/dialogs/ui/dialogs_layout.cpp b/Telegram/SourceFiles/dialogs/ui/dialogs_layout.cpp
+index d05a02fd6e..32d85a4dca 100644
+--- a/Telegram/SourceFiles/dialogs/ui/dialogs_layout.cpp
++++ b/Telegram/SourceFiles/dialogs/ui/dialogs_layout.cpp
+@@ -106,6 +106,33 @@ void PaintRowTopRight(
+ 		text);
+ }
+ 
++// BearGram: the pin of a pinned chat in a yellow ring.
++void PaintPinnedIcon(
++		QPainter &p,
++		const style::icon &icon,
++		int x,
++		int y,
++		int outerWidth) {
++	const auto rect = style::rtlrect(
++		x,
++		y,
++		icon.width(),
++		icon.height(),
++		outerWidth);
++	const auto size = std::min(rect.width(), rect.height());
++	const auto line = style::ConvertScaleExact(1.5);
++	const auto radius = size / 2. - line / 2.;
++	{
++		auto hq = PainterHighQualityEnabler(p);
++		auto pen = QPen(QColor(0xF5, 0xC5, 0x18));
++		pen.setWidthF(line);
++		p.setPen(pen);
++		p.setBrush(Qt::NoBrush);
++		p.drawEllipse(QRectF(rect).center(), radius, radius);
++	}
++	icon.paint(p, x, y, outerWidth);
++}
++
+ int PaintRightButtonImpl(QPainter &p, const PaintContext &context) {
+ 	if (context.width < st::columnMinimalWidthLeft) {
+ 		return 0;
+@@ -194,6 +221,7 @@ int PaintBadges(
+ 	};
+ 	auto initial = right;
+ 	auto painted = 0;
++	auto pinPainted = false;
+ 	if (badgesState.unread
+ 		&& !badgesState.unreadCounter
+ 		&& context.st->unreadMarkDiameter > 0) {
+@@ -239,8 +267,9 @@ int PaintBadges(
+ 			st::dialogsPinnedIcon,
+ 			context.active,
+ 			context.selected);
+-		icon.paint(p, right - icon.width(), pinnedIconTop, context.width);
++		PaintPinnedIcon(p, icon, right - icon.width(), pinnedIconTop, context.width);
+ 		right -= icon.width() + st::dialogsUnreadPadding;
++		pinPainted = true;
+ 	}
+ 	if ((!narrow || (painted < 2))
+ 		&& (badgesState.mention || badgesState.reaction)) {
+@@ -282,6 +311,16 @@ int PaintBadges(
+ 			UnreadBadgeSize::PollInDialogs);
+ 		++painted;
+ 	}
++	// BearGram: the pin of a pinned chat stays visible with unread
++	// messages, to the left of the counters.
++	if (displayPinnedIcon && !pinPainted && !narrow && painted > 0) {
++		const auto &icon = ThreeStateIcon(
++			st::dialogsPinnedIcon,
++			context.active,
++			context.selected);
++		PaintPinnedIcon(p, icon, right - icon.width(), pinnedIconTop, context.width);
++		right -= icon.width() + st::dialogsUnreadPadding;
++	}
+ 	return (initial - right);
+ }
+ 
+@@ -696,8 +735,9 @@ void PaintRow(
+ 				st::dialogsPinnedIcon,
+ 				context.active,
+ 				context.selected);
+-			icon.paint(
++			PaintPinnedIcon(
+ 				p,
++				icon,
+ 				context.width - context.st->padding.right() - icon.width(),
+ 				texttop,
+ 				context.width);
+@@ -798,7 +838,7 @@ void PaintRow(
+ 				st::dialogsPinnedIcon,
+ 				context.active,
+ 				context.selected);
+-			icon.paint(p, context.width - context.st->padding.right() - icon.width(), texttop, context.width);
++			PaintPinnedIcon(p, icon, context.width - context.st->padding.right() - icon.width(), texttop, context.width);
+ 			availableWidth -= icon.width() + st::dialogsUnreadPadding;
+ 		}
+ 
+@@ -831,7 +871,19 @@ void PaintRow(
+ 			PaintDialogDate(p, entry, fakeRow, date, rectForName, context);
+ 		}
+ 
+-		paintItemCallback(nameleft, namewidth);
++		paintItemCallback(nameleft, namewidth); 
++	} else if (entry->isPinnedDialog(context.filter)
++		&& (context.filter || !entry->fixedOnTopIndex())) {
++		auto &icon = ThreeStateIcon(
++			st::dialogsPinnedIcon,
++			context.active,
++			context.selected);
++		PaintPinnedIcon(
++			p,
++			icon,
++			context.width - context.st->padding.right() - icon.width(),
++			texttop,
++			context.width); 
+ 	} else {
+ 		if (hintDateShown) {
+ 			PaintDialogDate(p, entry, fakeRow, date, rectForName, context);
+@@ -842,12 +894,13 @@ void PaintRow(
+ 				st::dialogsPinnedIcon,
+ 				context.active,
+ 				context.selected);
+-			icon.paint(
+-				p,
+-				context.width - context.st->padding.right() - icon.width(),
+-				texttop,
+-				context.width);
+-		}
++		PaintPinnedIcon(
++			p,
++			icon,
++			context.width - context.st->padding.right() - icon.width(),
++			texttop,
++			context.width);
++	} 
+ 	}
+ 	const auto sendStateIcon = [&]() -> const style::icon* {
+ 		if (!thread) {
+@@ -1192,8 +1245,8 @@ void RowPainter::Paint(
+ 			: TimeId(0);
+ 		return std::max({ itemDate, draftDate, hintDate });
+ 	}();
+-	const auto displayPinnedIcon = badgesState.empty()
+-		&& entry->isPinnedDialog(context.filter)
++	// BearGram: with unread messages too, see PaintBadges.
++	const auto displayPinnedIcon = entry->isPinnedDialog(context.filter)
+ 		&& (context.filter || !entry->fixedOnTopIndex());
+ 
+ 	const auto from = history

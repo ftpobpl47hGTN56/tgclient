@@ -141,9 +141,12 @@ Every hook is marked with a `BearGram` comment:
 - `.github/workflows/beargram-sync.yml` runs daily: when a new stable Telegram
   Desktop release (`vX.Y.Z`) is out, `beargram/sync_upstream.sh` merges it into
   `beargram`. Conflicts in `core/version.h` and `winrc/Telegram.rc` are solved
-  by taking the upstream file and running `beargram/branding.py`; upstream
-  workflows are removed again. Any other conflict fails the run and nothing is
-  pushed. Needs the secret `BEARGRAM_PAT` (a token with Contents and Workflows
+  by taking the upstream file and running `beargram/branding.py`;
+  `Telegram/CMakeLists.txt` and `dialogs/ui/dialogs_layout.cpp` are solved by
+  taking the upstream file and applying the BearGram patch from
+  `beargram/patches`; the `Telegram/lib_ui` gitlink is solved by taking the
+  upstream commit. Upstream workflows are removed again. Any other conflict
+  fails the run and nothing is pushed. Needs the secret `BEARGRAM_PAT` (a token with Contents and Workflows
   write access), because upstream commits change `.github/workflows`.
 - `.github/workflows/beargram-windows.yml` builds `BearGram.exe` (Release, x64)
   on every push to `beargram` and publishes it in Releases as

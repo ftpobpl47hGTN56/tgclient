@@ -4,6 +4,12 @@
 #
 # - core/version.h and winrc/Telegram.rc: the upstream version is taken and
 #   beargram/branding.py puts the BearGram name back;
+# - Telegram/CMakeLists.txt and dialogs/ui/dialogs_layout.cpp: the upstream
+#   version is taken and the BearGram patch from beargram/patches is applied
+#   on top of it;
+# - Telegram/lib_ui: the submodule is not checked out in CI, so its gitlink
+#   conflicts on every merge; the upstream commit is taken, BearGram tracks
+#   upstream lib_ui and keeps no commits of its own there;
 # - .github: BearGram keeps only its own workflows (beargram-*.yml), so the
 #   upstream workflows and dependabot config are removed again.
 #
@@ -15,6 +21,10 @@ set -euo pipefail
 UPSTREAM_URL="https://github.com/telegramdesktop/tdesktop.git"
 VERSION_H="Telegram/SourceFiles/core/version.h"
 TELEGRAM_RC="Telegram/Resources/winrc/Telegram.rc"
+CMAKE_LISTS="Telegram/CMakeLists.txt"
+DIALOGS_LAYOUT="Telegram/SourceFiles/dialogs/ui/dialogs_layout.cpp"
+LIB_UI="Telegram/lib_ui"
+PATCH_DIR="beargram/patches"
 
 output() {
 	if [ -n "${GITHUB_OUTPUT:-}" ]; then
@@ -62,13 +72,49 @@ remove_upstream_github() {
 	done
 }
 
+apply_beargram_patch() {
+	# The upstream version is taken and the BearGram changes are reapplied
+	# from the patch. Regenerate the patch on the BearGram branch whenever
+	# one of these files changes on the BearGram side.
+	local file="$1" patch="$PATCH_DIR/$2"
+	git checkout --theirs -- "$file" || return 1
+	if ! git apply --whitespace=nowarn "$patch" \
+		&& ! git apply --ignore-whitespace --whitespace=nowarn "$patch"; then
+		return 1
+	fi
+	git add -- "$file"
+}
+
+take_theirs_lib_ui() {
+	# In CI the submodule worktree is not checked out, so git cannot merge
+	# the gitlink and reports a conflict even for a fast-forward. Record
+	# the upstream commit in the index directly.
+	local theirs
+	theirs=$(git ls-files -u -- "$LIB_UI" | awk '$3 == 3 { print $2; exit }')
+	if [ -z "$theirs" ]; then
+		theirs=$(git rev-parse "MERGE_HEAD:$LIB_UI") || return 1
+	fi
+	git update-index --cacheinfo "160000,$theirs,$LIB_UI"
+}
+
 if [ "$merged_cleanly" = 0 ]; then
 	unresolved=()
-	for file in $(git diff --name-only --diff-filter=U); do
+	while IFS= read -r file; do
 		case "$file" in
 			"$VERSION_H"|"$TELEGRAM_RC")
 				git checkout --theirs -- "$file"
 				git add -- "$file"
+				;;
+			"$CMAKE_LISTS")
+				apply_beargram_patch "$file" Telegram-CMakeLists.patch \
+					|| unresolved+=("$file")
+				;;
+			"$DIALOGS_LAYOUT")
+				apply_beargram_patch "$file" dialogs_layout.patch \
+					|| unresolved+=("$file")
+				;;
+			"$LIB_UI")
+				take_theirs_lib_ui || unresolved+=("$file")
 				;;
 			.github/workflows/*|.github/dependabot.yml)
 				# Changed upstream, removed in BearGram: keep it removed.
@@ -78,7 +124,7 @@ if [ "$merged_cleanly" = 0 ]; then
 				unresolved+=("$file")
 				;;
 		esac
-	done
+	done < <(git diff --name-only --diff-filter=U)
 	if [ "${#unresolved[@]}" -ne 0 ]; then
 		echo "::error::Merging $latest needs manual conflict resolution in:"
 		printf '  %s\n' "${unresolved[@]}"
