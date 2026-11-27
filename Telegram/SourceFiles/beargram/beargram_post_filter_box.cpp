@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/settings_common.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/empty_userpic.h"
+#include "ui/effects/animations.h"
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
 #include "ui/userpic_view.h"
@@ -27,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/padding_wrap.h"
+#include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_basic.h"
 #include "styles/style_boxes.h"
@@ -36,6 +38,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_settings.h"
 #include "styles/style_widgets.h"
 
+#include <QtCore/QDate>
+#include <QtCore/QDateTime>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
@@ -93,6 +97,12 @@ void RefreshNames(not_null<Main::Session*> session) {
 	return u"ID "_q + DisplayId(rule.peer);
 }
 
+[[nodiscard]] QString CreatedDate(TimeId created) {
+	return created
+		? langDayOfMonth(QDateTime::fromSecsSinceEpoch(created).date())
+		: QString();
+}
+
 [[nodiscard]] QString Subtitle(const Rule &rule) {
 	auto result = QString();
 	if (rule.type == RuleType::Word) {
@@ -106,6 +116,9 @@ void RefreshNames(not_null<Main::Session*> session) {
 		result = rule.username.isEmpty()
 			? (kind + u" · "_q + DisplayId(rule.peer))
 			: ('@' + rule.username + u" · "_q + DisplayId(rule.peer));
+	}
+	if (const auto date = CreatedDate(rule.created); !date.isEmpty()) {
+		result += u" · добавлено "_q + date;
 	}
 	return rule.enabled ? result : (result + u" · выключено"_q);
 }
@@ -407,21 +420,185 @@ void AddRuleRow(
 	}
 }
 
+enum class GroupType {
+	Channel,
+	User,
+	Word,
+};
+
+constexpr auto kGroupToggleDuration = crl::time(200);
+
+struct GroupToggles {
+	bool open = true;
+	float64 progress = 1.;
+	Ui::Animations::Simple animation;
+};
+
+// A "Каналы и группы (3)" style header with a chevron pointing down when
+// open and right when folded; the rules below fold with the toggle.
+// The header lives in the outer list, not in the folding part: folding
+// must not hide the chevron that unfolds the group back.
+void AddGroupHeader(
+		not_null<Ui::VerticalLayout*> parent,
+		not_null<GroupToggles*> toggles,
+		bool *persistedOpen,
+		QString title,
+		int count,
+		Fn<void()> toggled) {
+	const auto header = parent->add(
+		object_ptr<Ui::SettingsButton>(
+			parent,
+			rpl::single(title + u" (%1)"_q.arg(count)),
+			st::bearFilterGroupHeader));
+	header->setClickedCallback([=] {
+		toggles->open = !toggles->open;
+		*persistedOpen = toggles->open;
+		toggles->animation.start(
+			[=](float64 value) {
+				toggles->progress = value;
+				header->update();
+			},
+			toggles->progress,
+			toggles->open ? 1. : 0.,
+			kGroupToggleDuration);
+		toggled();
+	});
+	header->events(
+	) | rpl::filter([=](not_null<QEvent*> event) {
+		return event->type() == QEvent::Resize;
+	}) | rpl::on_next([=] {
+		header->update();
+	}, header->lifetime());
+	header->paintRequest() | rpl::on_next([=] {
+		auto p = Painter(header);
+		const auto center = header->height() / 2.;
+		const auto size = float64(st::bearFilterGroupChevronSize);
+		const auto rotate = -90. * (1. - toggles->progress);
+		const auto x = header->width() - st::bearFilterGroupChevronRight;
+		auto path = QPainterPath();
+		path.moveTo(x - size, center - size);
+		path.lineTo(x, center);
+		path.lineTo(x + size, center - size);
+		p.save();
+		p.translate(x, center);
+		p.rotate(rotate);
+		p.translate(-x, -center);
+		auto color = st::windowSubTextFg->c;
+		color.setAlphaF(color.alphaF() * st::bearFilterGroupChevronOpacity);
+		auto pen = QPen(color);
+		pen.setWidthF(float64(st::bearFilterGroupChevronStroke));
+		pen.setCapStyle(Qt::RoundCap);
+		pen.setJoinStyle(Qt::RoundJoin);
+		p.setPen(pen);
+		p.setBrush(Qt::NoBrush);
+		p.drawPath(path);
+		p.restore();
+	}, header->lifetime());
+}
+
+// Returns false when no rule matches this group, adding nothing.
+bool AddRulesGroup(
+		not_null<Ui::GenericBox*> box,
+		not_null<Ui::VerticalLayout*> list,
+		not_null<Main::Session*> session,
+		GroupType type,
+		bool *persistedOpen,
+		Fn<void()> persistOpen,
+		const QString &title,
+		const QString &query,
+		int &shownTotal) {
+	const auto &rules = Rules();
+	auto indices = std::vector<int>();
+	for (auto i = 0; i != int(rules.size()); ++i) {
+		const auto &rule = rules[i];
+		const auto group = (rule.type == RuleType::Word)
+			? GroupType::Word
+			: (peerIsUser(rule.peer) ? GroupType::User : GroupType::Channel);
+		if (group == type && MatchesQuery(rule, query)) {
+			indices.push_back(i);
+		}
+	}
+	if (indices.empty()) {
+		return false;
+	}
+
+	const auto header = list->add(
+		object_ptr<Ui::VerticalLayout>(list));
+	const auto wrap = list->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			list,
+			object_ptr<Ui::VerticalLayout>(list)));
+	const auto inner = wrap->entity();
+
+	const auto toggles = header->lifetime().make_state<GroupToggles>();
+	toggles->open = query.isEmpty() ? *persistedOpen : true;
+	toggles->progress = toggles->open ? 1. : 0.;
+
+	AddGroupHeader(
+		header,
+		toggles,
+		persistedOpen,
+		title,
+		int(indices.size()),
+		[=] {
+			wrap->toggle(toggles->open, anim::type::normal);
+			persistOpen();
+		});
+	for (const auto index : indices) {
+		AddRuleRow(box, inner, session, index, rules[index]);
+	}
+
+	header->resizeToWidth(list->width());
+	inner->resizeToWidth(list->width());
+	wrap->resizeToWidth(list->width());
+	wrap->setDuration(kGroupToggleDuration);
+	wrap->toggle(toggles->open, anim::type::instant);
+
+	shownTotal += int(indices.size());
+	return true;
+}
+
 void RebuildList(
 		not_null<Ui::GenericBox*> box,
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Ui::FlatLabel*> empty,
 		not_null<Main::Session*> session,
+		not_null<FilterGroupsOpen*> open,
+		Fn<void()> persistOpen,
 		const QString &query) {
 	list->clear();
 	const auto &rules = Rules();
 	auto shown = 0;
-	for (auto i = 0; i != int(rules.size()); ++i) {
-		if (MatchesQuery(rules[i], query)) {
-			AddRuleRow(box, list, session, i, rules[i]);
-			++shown;
-		}
-	}
+	AddRulesGroup(
+		box,
+		list,
+		session,
+		GroupType::Channel,
+		&open->channels,
+		persistOpen,
+		u"Каналы и группы"_q,
+		query,
+		shown);
+	AddRulesGroup(
+		box,
+		list,
+		session,
+		GroupType::User,
+		&open->users,
+		persistOpen,
+		u"Пользователи"_q,
+		query,
+		shown);
+	AddRulesGroup(
+		box,
+		list,
+		session,
+		GroupType::Word,
+		&open->words,
+		persistOpen,
+		u"Слова"_q,
+		query,
+		shown);
 	empty->setText(rules.empty()
 		? u"Правил пока нет. Добавьте @username, ID или слово выше, "
 			"или выделите текст в сообщении и нажмите правой кнопкой → "
@@ -431,7 +608,7 @@ void RebuildList(
 	list->resizeToWidth(list->width());
 }
 
-void ExportRules(not_null<Ui::GenericBox*> box) {
+void ExportRules(not_null<Ui::GenericBox*> box, bool nicknames) {
 	const auto weak = base::make_weak(box);
 	FileDialog::GetWritePath(
 		box.get(),
@@ -442,7 +619,7 @@ void ExportRules(not_null<Ui::GenericBox*> box) {
 			const auto text = path.endsWith(u".txt"_q, Qt::CaseInsensitive);
 			auto file = QFile(path);
 			const auto ok = file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-				&& (file.write(text ? ExportText() : ExportJson()) >= 0);
+				&& (file.write(text ? ExportText() : ExportJson(nicknames)) >= 0);
 			if (const auto strong = weak.get()) {
 				strong->showToast(ok
 					? (u"Сохранено: "_q + QDir::toNativeSeparators(path))
@@ -482,6 +659,12 @@ void ImportRules(
 			if (!imported.usernames.isEmpty()) {
 				text += u". Ищу @username: %1"_q.arg(
 					imported.usernames.size());
+			}
+			if (imported.pins) {
+				text += u". Пины: %1 акк."_q.arg(imported.pins);
+			}
+			if (imported.nicknames) {
+				text += u". Никнеймов: %1"_q.arg(imported.nicknames);
 			}
 			strong->showToast(text);
 			for (const auto &username : imported.usernames) {
@@ -561,6 +744,7 @@ void FilterBox(
 		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
 
 	Ui::AddSkip(container);
+	const auto withNicknames = container->lifetime().make_state<bool>(false);
 	Settings::AddButtonWithIcon(
 		container,
 		rpl::single(u"Импорт из файла (JSON или TXT)"_q),
@@ -572,7 +756,20 @@ void FilterBox(
 		rpl::single(u"Экспорт в файл"_q),
 		st::settingsButton,
 		{ &st::menuIconExport }
-	)->setClickedCallback([=] { ExportRules(box); });
+	)->setClickedCallback([=] {
+		ExportRules(box, *withNicknames);
+	});
+	const auto nicknamesCheck = container->add(
+		object_ptr<Ui::Checkbox>(
+			container,
+			u"Включить никнеймы в экспорт"_q,
+			false,
+			st::defaultBoxCheckbox),
+		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
+	nicknamesCheck->checkedChanges(
+	) | rpl::on_next([=](bool on) {
+		*withNicknames = on;
+	}, container->lifetime());
 	Settings::AddButtonWithIcon(
 		container,
 		rpl::single(u"Очистить все правила"_q),
@@ -581,7 +778,7 @@ void FilterBox(
 	)->setClickedCallback([=] { ClearRulesWithConfirm(box); });
 
 	Ui::AddSkip(container);
-	Ui::AddSubsectionTitle(
+	const auto rulesTitle = Ui::AddSubsectionTitle(
 		container,
 		rpl::single(u"Правила"_q));
 	const auto search = container->add(
@@ -602,13 +799,21 @@ void FilterBox(
 	const auto list = container->add(
 		object_ptr<Ui::VerticalLayout>(container));
 
+	const auto groupsOpen = container->lifetime().make_state<FilterGroupsOpen>(
+		GroupsOpen());
+	const auto saveGroups = [=] {
+		SetGroupsOpen(*groupsOpen);
+	};
 	const auto rebuild = [=] {
 		RebuildList(
 			box,
 			list,
 			empty,
 			session,
+			groupsOpen,
+			saveGroups,
 			search->getLastText().trimmed());
+		rulesTitle->setText(u"Правила (%1)"_q.arg(Rules().size()));
 	};
 	rebuild();
 	RulesChanges() | rpl::on_next(rebuild, list->lifetime());

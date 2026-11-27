@@ -945,6 +945,14 @@ bearFilterRowRemove: IconButton(bearFilterRowEdit) {
 	icon: icon {{ "menu/delete", boxTitleCloseFg }};
 	iconOver: icon {{ "menu/delete", attentionButtonFg }};
 }
+bearFilterGroupHeader: SettingsButton(defaultSettingsButton) {
+	padding: margins(22px, 8px, 22px, 6px);
+	toggleSkip: 0px;
+}
+bearFilterGroupChevronRight: 18px;
+bearFilterGroupChevronSize: 5px;
+bearFilterGroupChevronStroke: 1.5;
+bearFilterGroupChevronOpacity: 0.45;
 topBarCloseChoose: IconButton(topBarSearch) {
 	width: 56px;
 	icon: icon {{ "info/info_close", boxTitleCloseFg }};

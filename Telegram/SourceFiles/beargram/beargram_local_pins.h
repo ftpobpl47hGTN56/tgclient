@@ -6,6 +6,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <QtCore/QJsonObject>
+
 class History;
 
 namespace Main {
@@ -50,5 +52,12 @@ void RememberOrder(not_null<Main::Session*> session, Data::Folder *folder);
 // Puts the local pins and the remembered order back a moment later, after
 // the server list (or a part of the chats list) is applied.
 void ScheduleMerge(not_null<Main::Session*> session);
+
+// The "pins" object of tdata/beargram.json: {account id: {local, order}},
+// for the settings export. An empty object means there is nothing stored.
+[[nodiscard]] QJsonObject ExportPins();
+
+// Replaces the stored pins with the given object and saves the settings.
+void ImportPins(const QJsonObject &pins);
 
 } // namespace BearGram::LocalPins

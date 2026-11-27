@@ -41,7 +41,12 @@ struct State {
 	base::flat_map<uint64, Account> accounts;
 	base::flat_set<Main::Session*> scheduled;
 	base::flat_set<PeerId> requested;
+	base::flat_map<PeerId, int> attempts;
+	base::flat_set<Main::Session*> merged;
 };
+
+// Stop asking the server about a peer after this many failures.
+constexpr auto kMaxPeerAttempts = 4;
 
 [[nodiscard]] State &Instance() {
 	static auto result = State();
@@ -65,12 +70,7 @@ struct State {
 		: QJsonObject();
 }
 
-void Load(State &state) {
-	state.loaded = true;
-	auto root = ReadObject(SettingsPath()).value(u"pins"_q).toObject();
-	if (root.isEmpty()) {
-		root = ReadObject(OldFilePath());
-	}
+void Parse(const QJsonObject &root, State &state) {
 	for (auto i = root.begin(); i != root.end(); ++i) {
 		const auto userId = i.key().toULongLong();
 		if (!userId) {
@@ -96,7 +96,16 @@ void Load(State &state) {
 	}
 }
 
-void Save(const State &state) {
+void Load(State &state) {
+	state.loaded = true;
+	auto root = ReadObject(SettingsPath()).value(u"pins"_q).toObject();
+	if (root.isEmpty()) {
+		root = ReadObject(OldFilePath());
+	}
+	Parse(root, state);
+}
+
+[[nodiscard]] QJsonObject PinsObject(const State &state) {
 	auto root = QJsonObject();
 	for (const auto &[userId, account] : state.accounts) {
 		if (account.local.empty() && account.order.empty()) {
@@ -122,9 +131,13 @@ void Save(const State &state) {
 			{ u"order"_q, orders },
 		});
 	}
+	return root;
+}
+
+void Save(const State &state) {
 	// The rest of the settings file stays as it is.
 	auto settings = ReadObject(SettingsPath());
-	settings.insert(u"pins"_q, root);
+	settings.insert(u"pins"_q, PinsObject(state));
 	auto file = QSaveFile(SettingsPath());
 	if (file.open(QIODevice::WriteOnly)) {
 		file.write(QJsonDocument(settings).toJson(QJsonDocument::Indented));
@@ -183,10 +196,14 @@ void Save(const State &state) {
 }
 
 // Loads the dialogs of the local pins this session doesn't know yet.
+// One peer per request: a single bad peer (left channel, stale access
+// hash) must not fail the whole batch of pins.
 void RequestPeers(
 		not_null<Main::Session*> session,
 		const std::vector<std::pair<PeerId, uint64>> &peers) {
-	auto &requested = Instance().requested;
+	auto &state = Instance();
+	auto &requested = state.requested;
+	auto ids = std::vector<PeerId>();
 	auto list = QVector<MTPInputDialogPeer>();
 	for (const auto &[id, hash] : peers) {
 		if (requested.contains(id)) {
@@ -208,6 +225,7 @@ void RequestPeers(
 		}();
 		if (input) {
 			requested.emplace(id);
+			ids.push_back(id);
 			list.push_back(MTP_inputDialogPeer(*input));
 		}
 	}
@@ -215,28 +233,42 @@ void RequestPeers(
 		return;
 	}
 	const auto weak = base::make_weak(session);
-	session->api().request(MTPmessages_GetPeerDialogs(
-		MTP_vector(std::move(list))
-	)).done([=](const MTPmessages_PeerDialogs &result) {
-		const auto strong = weak.get();
-		if (!strong) {
-			return;
-		}
-		auto &histories = strong->data().histories();
-		histories.applyPeerDialogs(result);
-		result.match([&](const MTPDmessages_peerDialogs &data) {
-			for (const auto &dialog : data.vdialogs().v) {
-				dialog.match([&](const MTPDdialog &data) {
-					if (const auto id = peerFromMTP(data.vpeer())) {
-						const auto history = strong->data().history(id);
-						histories.dialogEntryApplied(history);
-						history->updateChatListExistence();
-					}
-				}, [](const auto &) {});
+	for (auto i = 0; i != list.size(); ++i) {
+		const auto peerId = ids[i];
+		const auto single = QVector<MTPInputDialogPeer>{ list[i] };
+		session->api().request(MTPmessages_GetPeerDialogs(
+			MTP_vector(single)
+		)).done([=](const MTPmessages_PeerDialogs &result) {
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
 			}
-		});
-		ScheduleMerge(strong);
-	}).send();
+			auto &histories = strong->data().histories();
+			histories.applyPeerDialogs(result);
+			result.match([&](const MTPDmessages_peerDialogs &data) {
+				for (const auto &dialog : data.vdialogs().v) {
+					dialog.match([&](const MTPDdialog &data) {
+						if (const auto id = peerFromMTP(data.vpeer())) {
+							const auto history = strong->data().history(id);
+							histories.dialogEntryApplied(history);
+							history->updateChatListExistence();
+						}
+					}, [](const auto &) {});
+				}
+			});
+			Instance().attempts.remove(peerId);
+			ScheduleMerge(strong);
+		}).fail([=](const MTP::Error &) {
+			auto &state = Instance();
+			const auto j = state.attempts.find(peerId);
+			const auto next = (j == end(state.attempts)) ? 1 : j->second + 1;
+			if (next >= kMaxPeerAttempts) {
+				return;
+			}
+			state.attempts[peerId] = next;
+			state.requested.remove(peerId);
+		}).send();
+	}
 }
 
 void Merge(not_null<Main::Session*> session, Data::Folder *folder) {
@@ -327,6 +359,7 @@ void RemoveLocal(not_null<History*> history) {
 }
 
 void RememberOrder(not_null<Main::Session*> session, Data::Folder *folder) {
+	auto &state = Instance();
 	auto &account = AccountFor(session);
 	auto names = std::vector<QString>();
 	for (const auto &key : session->data().pinnedChatsOrder(folder)) {
@@ -335,6 +368,12 @@ void RememberOrder(not_null<Main::Session*> session, Data::Folder *folder) {
 		}
 	}
 	auto &stored = account.order[FolderIndex(folder)];
+	// The list in the UI is still the short server one, the merge hasn't
+	// restored the stored order yet: don't overwrite it with this.
+	const auto restored = state.merged.contains(session.get());
+	if (!restored && !stored.empty() && names.size() < stored.size()) {
+		return;
+	}
 	if (stored != names) {
 		stored = std::move(names);
 		Save(Instance());
@@ -360,7 +399,28 @@ void ScheduleMerge(not_null<Main::Session*> session) {
 				Data::Folder::kId)) {
 			Merge(strong, archive);
 		}
+		Instance().merged.emplace(raw);
 	});
+}
+
+QJsonObject ExportPins() {
+	auto &state = Instance();
+	if (!state.loaded) {
+		Load(state);
+	}
+	return PinsObject(state);
+}
+
+void ImportPins(const QJsonObject &pins) {
+	auto &state = Instance();
+	if (!state.loaded) {
+		Load(state);
+	}
+	state.accounts.clear();
+	state.requested.clear();
+	state.attempts.clear();
+	Parse(pins, state);
+	Save(state);
 }
 
 } // namespace BearGram::LocalPins

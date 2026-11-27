@@ -73,6 +73,27 @@ QString Nickname(UserId userId) {
 	return (i != end(names)) ? i->second : QString();
 }
 
+QJsonObject ExportNicknames() {
+	auto object = QJsonObject();
+	for (const auto &[id, name] : Names()) {
+		object.insert(QString::number(id), name);
+	}
+	return object;
+}
+
+void ImportNicknames(const QJsonObject &object) {
+	auto &names = Names();
+	names.clear();
+	for (auto i = object.begin(); i != object.end(); ++i) {
+		const auto id = i.key().toULongLong();
+		const auto name = i.value().toString().trimmed();
+		if (id && !name.isEmpty()) {
+			names.emplace(id, name);
+		}
+	}
+	Save();
+}
+
 void SetNickname(not_null<UserData*> user, const QString &name) {
 	const auto value = name.trimmed();
 	const auto id = peerToUser(user->id).bare;

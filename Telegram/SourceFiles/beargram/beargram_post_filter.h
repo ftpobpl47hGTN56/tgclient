@@ -43,11 +43,22 @@ struct Rule {
 	QString username; // Last known username for RuleType::Peer.
 	bool wholeWord = false; // RuleType::Word.
 	bool enabled = true;
+	TimeId created = 0; // Unix time, 0 in rules made before this.
 };
 
 [[nodiscard]] bool Enabled();
 [[nodiscard]] rpl::producer<bool> EnabledValue();
 void SetEnabled(bool enabled);
+
+struct FilterGroupsOpen {
+	bool channels = true;
+	bool users = true;
+	bool words = true;
+};
+
+// Folded state of the groups in the filter box, kept between openings.
+[[nodiscard]] FilterGroupsOpen GroupsOpen();
+void SetGroupsOpen(FilterGroupsOpen open);
 
 [[nodiscard]] const std::vector<Rule> &Rules();
 [[nodiscard]] rpl::producer<> RulesChanges();
@@ -69,14 +80,18 @@ void ClearRules();
 // Puts a new rule in place of the one at index, keeping its on/off state.
 bool ReplaceRule(int index, Rule rule);
 
-// Export as JSON (the same as the settings file) or as plain text with one
-// rule per line. Import takes either, merging into the current rules.
-[[nodiscard]] QByteArray ExportJson();
+// Export as JSON: the rules, the local pins of every account and, when
+// asked, the local nicknames. Plain text is one rule per line. Import
+// takes either, merging rules into the current ones; the pins and the
+// nicknames in the file replace the stored ones.
+[[nodiscard]] QByteArray ExportJson(bool nicknames = false);
 [[nodiscard]] QByteArray ExportText();
 struct ImportResult {
 	int added = 0;
 	int skipped = 0; // Already there.
 	QStringList usernames; // "@name" lines: need the API to find the id.
+	int pins = 0; // Accounts in the "pins" group.
+	int nicknames = 0; // Nicknames in the "nicknames" group.
 };
 ImportResult Import(const QByteArray &content);
 

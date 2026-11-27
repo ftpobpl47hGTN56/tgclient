@@ -6,6 +6,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "beargram/beargram_post_filter.h"
 
+#include "beargram/beargram_local_pins.h"
+#include "beargram/beargram_nicknames.h"
+#include "base/unixtime.h"
 #include "core/application.h"
 #include "data/data_channel.h"
 #include "data/data_peer.h"
@@ -40,6 +43,7 @@ struct Cached {
 
 struct State {
 	rpl::variable<bool> enabled = true;
+	FilterGroupsOpen groupsOpen;
 	std::vector<Rule> rules;
 	rpl::event_stream<> changes;
 
@@ -122,6 +126,7 @@ void Rebuild(State &state) {
 [[nodiscard]] std::optional<Rule> RuleFromJson(const QJsonObject &entry) {
 	auto rule = Rule();
 	rule.enabled = entry.value(u"on"_q).toBool(true);
+	rule.created = entry.value(u"created"_q).toInt();
 	if (entry.value(u"type"_q).toString() == u"peer"_q) {
 		rule.type = RuleType::Peer;
 		rule.peer = ParseId(entry.value(u"id"_q).toString());
@@ -154,10 +159,13 @@ void Rebuild(State &state) {
 		entry.insert(u"whole"_q, rule.wholeWord);
 	}
 	entry.insert(u"on"_q, rule.enabled);
+	if (rule.created) {
+		entry.insert(u"created"_q, double(rule.created));
+	}
 	return entry;
 }
 
-[[nodiscard]] QByteArray Serialize(const State &state) {
+[[nodiscard]] QByteArray Serialize(const State &state, bool nicknames) {
 	auto rules = QJsonArray();
 	for (const auto &rule : state.rules) {
 		rules.push_back(RuleToJson(rule));
@@ -165,7 +173,16 @@ void Rebuild(State &state) {
 	auto object = QJsonObject();
 	object.insert(u"format"_q, kFormat);
 	object.insert(u"enabled"_q, state.enabled.current());
+	auto groups = QJsonObject();
+	groups.insert(u"channels"_q, state.groupsOpen.channels);
+	groups.insert(u"users"_q, state.groupsOpen.users);
+	groups.insert(u"words"_q, state.groupsOpen.words);
+	object.insert(u"groups"_q, groups);
 	object.insert(u"rules"_q, rules);
+	object.insert(u"pins"_q, LocalPins::ExportPins());
+	if (nicknames) {
+		object.insert(u"nicknames"_q, BearGram::ExportNicknames());
+	}
 	return QJsonDocument(object).toJson(QJsonDocument::Indented);
 }
 
@@ -178,6 +195,10 @@ bool Load(State &state) {
 	const auto object = QJsonDocument::fromJson(file.readAll()).object();
 	const auto old = (object.value(u"format"_q).toInt(1) < kFormat);
 	state.enabled = object.value(u"enabled"_q).toBool(true);
+	const auto groups = object.value(u"groups"_q).toObject();
+	state.groupsOpen.channels = groups.value(u"channels"_q).toBool(true);
+	state.groupsOpen.users = groups.value(u"users"_q).toBool(true);
+	state.groupsOpen.words = groups.value(u"words"_q).toBool(true);
 	for (const auto value : object.value(u"rules"_q).toArray()) {
 		if (auto rule = RuleFromJson(value.toObject())) {
 			if (old) {
@@ -192,7 +213,7 @@ bool Load(State &state) {
 void Save(const State &state) {
 	auto file = QFile(FilePath());
 	if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-		file.write(Serialize(state));
+		file.write(Serialize(state, false));
 	}
 }
 
@@ -280,6 +301,7 @@ bool Insert(State &state, Rule rule) {
 	if (FindRule(state, rule) >= 0) {
 		return false;
 	}
+	rule.created = rule.created ? rule.created : base::unixtime::now();
 	state.rules.push_back(std::move(rule));
 	return true;
 }
@@ -411,6 +433,21 @@ void SetEnabled(bool enabled) {
 	Changed();
 }
 
+FilterGroupsOpen GroupsOpen() {
+	return Instance().groupsOpen;
+}
+
+void SetGroupsOpen(FilterGroupsOpen open) {
+	auto &state = Instance();
+	if (state.groupsOpen.channels == open.channels
+		&& state.groupsOpen.users == open.users
+		&& state.groupsOpen.words == open.words) {
+		return;
+	}
+	state.groupsOpen = open;
+	Save(state);
+}
+
 const std::vector<Rule> &Rules() {
 	return Instance().rules;
 }
@@ -510,8 +547,8 @@ void ClearRules() {
 	Changed();
 }
 
-QByteArray ExportJson() {
-	return Serialize(Instance());
+QByteArray ExportJson(bool nicknames) {
+	return Serialize(Instance(), nicknames);
 }
 
 QByteArray ExportText() {
@@ -552,6 +589,16 @@ ImportResult Import(const QByteArray &content) {
 					++result.skipped;
 				}
 			}
+		}
+		const auto pins = object.value(u"pins"_q).toObject();
+		if (!pins.isEmpty()) {
+			result.pins = int(pins.size());
+			LocalPins::ImportPins(pins);
+		}
+		const auto nicknames = object.value(u"nicknames"_q).toObject();
+		if (!nicknames.isEmpty()) {
+			result.nicknames = int(nicknames.size());
+			BearGram::ImportNicknames(nicknames);
 		}
 	} else {
 		static const auto username = QRegularExpression(
