@@ -75,6 +75,8 @@ void UpdatePeerInfo(not_null<PeerData*> peer);
 
 void SetRuleEnabled(int index, bool enabled);
 void RemoveRule(int index);
+// Removes several rules with a single save, to delete a selection.
+void RemoveRuleIndices(const std::vector<int> &indices);
 void ClearRules();
 
 // Puts a new rule in place of the one at index, keeping its on/off state.

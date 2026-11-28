@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "beargram/beargram_post_filter.h"
 
 #include "apiwrap.h"
+#include "base/flat_set.h"
 #include "core/application.h"
 #include "core/file_utilities.h"
 #include "data/data_peer.h"
@@ -37,6 +38,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "styles/style_widgets.h"
+
+#include <algorithm>
+#include <tuple>
+#include <utility>
+#include <rpl/variable.h>
 
 #include <QtCore/QDate>
 #include <QtCore/QDateTime>
@@ -222,6 +228,67 @@ void ParseInput(
 		&& (a.wholeWord == b.wholeWord);
 }
 
+struct RuleKey {
+	int type = 0;
+	uint64 peer = 0;
+	QString text;
+	bool wholeWord = false;
+
+	friend bool operator<(const RuleKey &a, const RuleKey &b) {
+		return std::tie(a.type, a.peer, a.text, a.wholeWord)
+			< std::tie(b.type, b.peer, b.text, b.wholeWord);
+	}
+};
+
+[[nodiscard]] RuleKey FromRule(const Rule &rule) {
+	return {
+		.type = int(rule.type),
+		.peer = rule.peer.value,
+		.text = rule.text,
+		.wholeWord = rule.wholeWord,
+	};
+}
+
+struct SelectionUi {
+	rpl::variable<bool> selecting = false;
+	rpl::variable<QString> deleteText = u"Удалить"_q;
+	base::flat_set<RuleKey> selected;
+	std::vector<std::pair<not_null<Ui::Checkbox*>, RuleKey>> checks;
+	Ui::SettingsButton *deleteButton = nullptr;
+};
+
+void RefreshSelectionUi(not_null<SelectionUi*> selection) {
+	const auto count = int(selection->selected.size());
+	selection->deleteText = count
+		? (u"Удалить (%1)"_q).arg(count)
+		: u"Удалить"_q;
+	if (selection->deleteButton) {
+		selection->deleteButton->setEnabled(count > 0);
+	}
+}
+
+void SetRuleSelected(
+		not_null<SelectionUi*> selection,
+		const RuleKey &key,
+		bool selected) {
+	if (selected) {
+		selection->selected.insert(key);
+	} else {
+		selection->selected.remove(key);
+	}
+	RefreshSelectionUi(selection);
+}
+
+[[nodiscard]] int ContentTopOffset(
+		not_null<QWidget*> widget,
+		not_null<QWidget*> ancestor) {
+	auto result = 0;
+	for (auto w = widget.get(); w && w != ancestor.get(); w = w->parentWidget()) {
+		result += w->y();
+	}
+	return result;
+}
+
 void EditRuleBox(
 		not_null<Ui::GenericBox*> box,
 		not_null<Main::Session*> session,
@@ -291,8 +358,11 @@ void EditRuleBox(
 
 void AddRuleRow(
 		not_null<Ui::GenericBox*> box,
+		not_null<Ui::VerticalLayout*> contentRoot,
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Main::Session*> session,
+		not_null<SelectionUi*> selection,
+		const Fn<void(int contentY)> &beforeRemove,
 		int index,
 		const Rule &rule) {
 	const auto row = list->add(
@@ -303,6 +373,7 @@ void AddRuleRow(
 	const auto enabled = rule.enabled;
 	const auto isPeer = (rule.type == RuleType::Peer);
 	const auto peerId = rule.peer;
+	const auto key = FromRule(rule);
 
 	struct State {
 		Ui::PeerUserpicView view;
@@ -320,6 +391,7 @@ void AddRuleRow(
 	remove->setAccessibleName(u"Удалить правило"_q);
 	remove->setClickedCallback([=] {
 		// The list is rebuilt from RulesChanges(), this row goes away.
+		beforeRemove(ContentTopOffset(row, contentRoot));
 		crl::on_main(remove, [=] { RemoveRule(index); });
 	});
 
@@ -343,11 +415,22 @@ void AddRuleRow(
 		crl::on_main(toggle, [=] { SetRuleEnabled(index, checked); });
 	}, toggle->lifetime());
 
-	// The row is added to an already shown list after a rebuild, and
-	// children created after their parent was shown stay hidden in Qt.
+	const auto check = Ui::CreateChild<Ui::Checkbox>(
+		row,
+		QString(),
+		selection->selected.contains(key),
+		st::defaultCheckbox,
+		st::defaultCheck);
+	check->resizeToWidth(check->naturalWidth() + st::defaultCheckbox.width);
+	// The whole row selects, the checkbox is just its indicator.
+	check->setAttribute(Qt::WA_TransparentForMouseEvents);
+
 	remove->show();
 	edit->show();
 	toggle->show();
+	check->show();
+
+	selection->checks.emplace_back(check, key);
 
 	row->widthValue() | rpl::on_next([=](int width) {
 		const auto right = st::boxRowPadding.right() / 2;
@@ -358,6 +441,36 @@ void AddRuleRow(
 		toggle->moveToRight(
 			right + remove->width() + edit->width(),
 			(kRowHeight - toggle->height()) / 2);
+		check->moveToRight(right, (kRowHeight - check->height()) / 2);
+	}, row->lifetime());
+
+	std::move(selection->selecting.value()) | rpl::on_next([=](bool on) {
+		check->setVisible(on);
+		check->setChecked(
+			selection->selected.contains(key),
+			Ui::Checkbox::NotifyAboutChange::DontNotify);
+		toggle->setVisible(!on);
+		remove->setVisible(!on);
+		edit->setVisible(!on);
+		row->setCursor(on ? Qt::PointingHandCursor : Qt::ArrowCursor);
+	}, check->lifetime());
+
+	row->events(
+	) | rpl::filter([=](not_null<QEvent*> event) {
+		return (event->type() == QEvent::MouseButtonRelease)
+			&& selection->selecting.current();
+	}) | rpl::on_next([=](not_null<QEvent*> event) {
+		if (static_cast<QMouseEvent*>(event.get())->button()
+				!= Qt::LeftButton) {
+			return;
+		}
+		SetRuleSelected(
+			selection,
+			key,
+			!selection->selected.contains(key));
+		check->setChecked(
+			selection->selected.contains(key),
+			Ui::Checkbox::NotifyAboutChange::DontNotify);
 	}, row->lifetime());
 
 	// The list keeps its width when it is rebuilt (search, toggles), so
@@ -436,20 +549,14 @@ struct GroupToggles {
 
 // A "Каналы и группы (3)" style header with a chevron pointing down when
 // open and right when folded; the rules below fold with the toggle.
-// The header lives in the outer list, not in the folding part: folding
-// must not hide the chevron that unfolds the group back.
+// The button lives in the outer list, not in the folding part: folding
+// must not hide the chevron that unfolds the group back, and a rebuild
+// must not recreate the button, that resets its folded state.
 void AddGroupHeader(
-		not_null<Ui::VerticalLayout*> parent,
+		not_null<Ui::SettingsButton*> header,
 		not_null<GroupToggles*> toggles,
 		bool *persistedOpen,
-		QString title,
-		int count,
 		Fn<void()> toggled) {
-	const auto header = parent->add(
-		object_ptr<Ui::SettingsButton>(
-			parent,
-			rpl::single(title + u" (%1)"_q.arg(count)),
-			st::bearFilterGroupHeader));
 	header->setClickedCallback([=] {
 		toggles->open = !toggles->open;
 		*persistedOpen = toggles->open;
@@ -496,109 +603,213 @@ void AddGroupHeader(
 	}, header->lifetime());
 }
 
-// Returns false when no rule matches this group, adding nothing.
-bool AddRulesGroup(
-		not_null<Ui::GenericBox*> box,
+enum class SortMode {
+	ByAdded,
+	Alphabetical,
+	Newest,
+	Oldest,
+};
+
+[[nodiscard]] QString SortModeText(SortMode mode) {
+	switch (mode) {
+	case SortMode::Alphabetical:
+		return u"Сортировка: по алфавиту"_q;
+	case SortMode::Newest:
+		return u"Сортировка: сначала новые"_q;
+	case SortMode::Oldest:
+		return u"Сортировка: сначала старые"_q;
+	}
+	return u"Сортировка: по добавлению"_q;
+}
+
+[[nodiscard]] SortMode NextSortMode(SortMode mode) {
+	switch (mode) {
+	case SortMode::ByAdded:
+		return SortMode::Alphabetical;
+	case SortMode::Alphabetical:
+		return SortMode::Newest;
+	case SortMode::Newest:
+		return SortMode::Oldest;
+	}
+	return SortMode::ByAdded;
+}
+
+void SortRuleIndices(std::vector<int> &indices, SortMode mode) {
+	const auto &rules = Rules();
+	switch (mode) {
+	case SortMode::Alphabetical:
+		std::stable_sort(
+			begin(indices),
+			end(indices),
+			[&](int a, int b) {
+				return Title(rules[a]).localeAwareCompare(
+					Title(rules[b])) < 0;
+			});
+		return;
+	case SortMode::Newest:
+		std::stable_sort(
+			begin(indices),
+			end(indices),
+			[&](int a, int b) {
+				return rules[a].created > rules[b].created;
+			});
+		return;
+	case SortMode::Oldest:
+		std::stable_sort(
+			begin(indices),
+			end(indices),
+			[&](int a, int b) {
+				const auto ca = rules[a].created;
+				const auto cb = rules[b].created;
+				return (ca && cb)
+					? (ca < cb)
+					: (ca && !cb); // dated rules first, undated last
+			});
+		return;
+	case SortMode::ByAdded:
+		return;
+	}
+}
+
+[[nodiscard]] GroupType GroupOfRule(const Rule &rule) {
+	return (rule.type == RuleType::Word)
+		? GroupType::Word
+		: (peerIsUser(rule.peer) ? GroupType::User : GroupType::Channel);
+}
+
+// A permanent group: created once per box, so its chevron state survives
+// every rebuild of the rules inside it.
+
+struct GroupSection {
+	GroupType type = GroupType::Channel;
+	QString title;
+	bool *persistedOpen = nullptr;
+	Fn<void()> persistOpen;
+	not_null<Ui::SlideWrap<Ui::VerticalLayout>*> headerWrap;
+	not_null<Ui::SettingsButton*> button;
+	not_null<GroupToggles*> toggles;
+	not_null<rpl::variable<QString>*> titleText;
+	not_null<Ui::SlideWrap<Ui::VerticalLayout>*> wrap;
+	not_null<Ui::VerticalLayout*> inner;
+};
+
+[[nodiscard]] GroupSection MakeGroupSection(
 		not_null<Ui::VerticalLayout*> list,
-		not_null<Main::Session*> session,
 		GroupType type,
+		QString title,
 		bool *persistedOpen,
-		Fn<void()> persistOpen,
-		const QString &title,
+		Fn<void()> persistOpen) {
+	const auto headerWrap = list->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			list,
+			object_ptr<Ui::VerticalLayout>(list)));
+	const auto header = headerWrap->entity();
+	const auto toggles = list->lifetime().make_state<GroupToggles>();
+	const auto titleText = list->lifetime().make_state<rpl::variable<QString>>(
+		title);
+	const auto button = header->add(
+		object_ptr<Ui::SettingsButton>(
+			header,
+			titleText->value(),
+			st::bearFilterGroupHeader));
+	const auto wrap = list->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			list,
+			object_ptr<Ui::VerticalLayout>(list)));
+	wrap->setDuration(kGroupToggleDuration);
+	toggles->open = *persistedOpen;
+	toggles->progress = toggles->open ? 1. : 0.;
+	AddGroupHeader(
+		button,
+		toggles,
+		persistedOpen,
+		[=] {
+			wrap->toggle(toggles->open, anim::type::normal);
+			persistOpen();
+		});
+	return {
+		.type = type,
+		.title = std::move(title),
+		.persistedOpen = persistedOpen,
+		.persistOpen = std::move(persistOpen),
+		.headerWrap = headerWrap,
+		.button = button,
+		.toggles = toggles,
+		.titleText = titleText,
+		.wrap = wrap,
+		.inner = wrap->entity(),
+	};
+}
+
+void FillGroupSection(
+		not_null<Ui::GenericBox*> box,
+		not_null<Ui::VerticalLayout*> contentRoot,
+		not_null<Main::Session*> session,
+		const GroupSection &section,
+		not_null<SelectionUi*> selection,
+		const Fn<void(int contentY)> &beforeRemove,
+		SortMode sortMode,
 		const QString &query,
 		int &shownTotal) {
 	const auto &rules = Rules();
 	auto indices = std::vector<int>();
 	for (auto i = 0; i != int(rules.size()); ++i) {
 		const auto &rule = rules[i];
-		const auto group = (rule.type == RuleType::Word)
-			? GroupType::Word
-			: (peerIsUser(rule.peer) ? GroupType::User : GroupType::Channel);
-		if (group == type && MatchesQuery(rule, query)) {
+		if (GroupOfRule(rule) == section.type && MatchesQuery(rule, query)) {
 			indices.push_back(i);
 		}
 	}
-	if (indices.empty()) {
-		return false;
-	}
+	SortRuleIndices(indices, sortMode);
+	*section.titleText = section.title + u" (%1)"_q.arg(int(indices.size()));
 
-	const auto header = list->add(
-		object_ptr<Ui::VerticalLayout>(list));
-	const auto wrap = list->add(
-		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
-			list,
-			object_ptr<Ui::VerticalLayout>(list)));
-	const auto inner = wrap->entity();
-
-	const auto toggles = header->lifetime().make_state<GroupToggles>();
-	toggles->open = query.isEmpty() ? *persistedOpen : true;
-	toggles->progress = toggles->open ? 1. : 0.;
-
-	AddGroupHeader(
-		header,
-		toggles,
-		persistedOpen,
-		title,
-		int(indices.size()),
-		[=] {
-			wrap->toggle(toggles->open, anim::type::normal);
-			persistOpen();
-		});
+	section.inner->clear();
 	for (const auto index : indices) {
-		AddRuleRow(box, inner, session, index, rules[index]);
+		AddRuleRow(
+			box,
+			contentRoot,
+			section.inner,
+			session,
+			selection,
+			beforeRemove,
+			index,
+			rules[index]);
 	}
 
-	header->resizeToWidth(list->width());
-	inner->resizeToWidth(list->width());
-	wrap->resizeToWidth(list->width());
-	wrap->setDuration(kGroupToggleDuration);
-	wrap->toggle(toggles->open, anim::type::instant);
-
-	shownTotal += int(indices.size());
-	return true;
+	const auto has = !indices.empty();
+	const auto open = section.toggles->open || !query.isEmpty();
+	section.headerWrap->toggle(has, anim::type::instant);
+	section.wrap->toggle(has && open, anim::type::instant);
+	if (has) {
+		shownTotal += int(indices.size());
+	}
 }
 
 void RebuildList(
 		not_null<Ui::GenericBox*> box,
+		not_null<Ui::VerticalLayout*> contentRoot,
 		not_null<Ui::VerticalLayout*> list,
 		not_null<Ui::FlatLabel*> empty,
 		not_null<Main::Session*> session,
-		not_null<FilterGroupsOpen*> open,
-		Fn<void()> persistOpen,
+		const std::vector<GroupSection> &sections,
+		not_null<SelectionUi*> selection,
+		const Fn<void(int contentY)> &beforeRemove,
+		SortMode sortMode,
 		const QString &query) {
-	list->clear();
-	const auto &rules = Rules();
+	selection->checks.clear();
 	auto shown = 0;
-	AddRulesGroup(
-		box,
-		list,
-		session,
-		GroupType::Channel,
-		&open->channels,
-		persistOpen,
-		u"Каналы и группы"_q,
-		query,
-		shown);
-	AddRulesGroup(
-		box,
-		list,
-		session,
-		GroupType::User,
-		&open->users,
-		persistOpen,
-		u"Пользователи"_q,
-		query,
-		shown);
-	AddRulesGroup(
-		box,
-		list,
-		session,
-		GroupType::Word,
-		&open->words,
-		persistOpen,
-		u"Слова"_q,
-		query,
-		shown);
+	for (const auto &section : sections) {
+		FillGroupSection(
+			box,
+			contentRoot,
+			session,
+			section,
+			selection,
+			beforeRemove,
+			sortMode,
+			query,
+			shown);
+	}
+	const auto &rules = Rules();
 	empty->setText(rules.empty()
 		? u"Правил пока нет. Добавьте @username, ID или слово выше, "
 			"или выделите текст в сообщении и нажмите правой кнопкой → "
@@ -610,11 +821,12 @@ void RebuildList(
 
 void ExportRules(not_null<Ui::GenericBox*> box, bool nicknames) {
 	const auto weak = base::make_weak(box);
+	const auto count = int(Rules().size());
 	FileDialog::GetWritePath(
 		box.get(),
 		u"Экспорт фильтра постов"_q,
 		u"JSON (*.json);;Текст (*.txt)"_q,
-		QDir::homePath() + u"/beargram_post_filter.json"_q,
+		QDir::homePath() + u"/beargram_post_filter_%1.json"_q.arg(count),
 		[=](QString &&path) {
 			const auto text = path.endsWith(u".txt"_q, Qt::CaseInsensitive);
 			auto file = QFile(path);
@@ -781,6 +993,54 @@ void FilterBox(
 	const auto rulesTitle = Ui::AddSubsectionTitle(
 		container,
 		rpl::single(u"Правила"_q));
+
+	const auto keepScroll = container->lifetime().make_state<int>(-1);
+	const auto sortMode = container->lifetime().make_state<rpl::variable<SortMode>>(
+		SortMode::ByAdded);
+	const auto sortText = container->lifetime().make_state<rpl::variable<QString>>(
+		SortModeText(SortMode::ByAdded));
+	const auto selectionUi = container->lifetime().make_state<SelectionUi>();
+	const auto requestRebuild = container->lifetime().make_state<Fn<void()>>();
+
+	const auto toolbarWrap = container->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			container,
+			object_ptr<Ui::VerticalLayout>(container)));
+	const auto toolbar = toolbarWrap->entity();
+	const auto sortButton = toolbar->add(
+		object_ptr<Ui::SettingsButton>(
+			toolbar,
+			sortText->value(),
+			st::settingsButtonNoIcon));
+	const auto selectButton = toolbar->add(
+		object_ptr<Ui::SettingsButton>(
+			toolbar,
+			rpl::single(u"Выделить"_q),
+			st::settingsButtonNoIcon));
+
+	const auto selectionWrap = container->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			container,
+			object_ptr<Ui::VerticalLayout>(container)));
+	const auto selectionPanel = selectionWrap->entity();
+	const auto selectAllButton = selectionPanel->add(
+		object_ptr<Ui::SettingsButton>(
+			selectionPanel,
+			rpl::single(u"Выделить всё"_q),
+			st::settingsButtonNoIcon));
+	const auto deleteSelectedButton = selectionPanel->add(
+		object_ptr<Ui::SettingsButton>(
+			selectionPanel,
+			selectionUi->deleteText.value(),
+			st::settingsAttentionButton));
+	deleteSelectedButton->setEnabled(false);
+	selectionUi->deleteButton = deleteSelectedButton;
+	const auto cancelSelectionButton = selectionPanel->add(
+		object_ptr<Ui::SettingsButton>(
+			selectionPanel,
+			rpl::single(u"Отмена"_q),
+			st::settingsButtonNoIcon));
+
 	const auto search = container->add(
 		object_ptr<Ui::InputField>(
 			container,
@@ -804,20 +1064,143 @@ void FilterBox(
 	const auto saveGroups = [=] {
 		SetGroupsOpen(*groupsOpen);
 	};
+	const auto sections = container->lifetime().make_state<std::vector<GroupSection>>();
+	sections->push_back(MakeGroupSection(
+		list,
+		GroupType::Channel,
+		u"Каналы и группы"_q,
+		&groupsOpen->channels,
+		saveGroups));
+	sections->push_back(MakeGroupSection(
+		list,
+		GroupType::User,
+		u"Пользователи"_q,
+		&groupsOpen->users,
+		saveGroups));
+	sections->push_back(MakeGroupSection(
+		list,
+		GroupType::Word,
+		u"Слова"_q,
+		&groupsOpen->words,
+		saveGroups));
+
+	const auto beforeRemove = [=](int contentY) {
+		// The scroll is clamped to zero while the list is rebuilt, keep
+		// the position: skip the height of the row removed above it.
+		const auto top = box->scrollTop();
+		*keepScroll = top - ((contentY < top) ? kRowHeight : 0);
+	};
 	const auto rebuild = [=] {
+		if (*keepScroll < 0) {
+			*keepScroll = box->scrollTop();
+		}
 		RebuildList(
 			box,
+			container,
 			list,
 			empty,
 			session,
-			groupsOpen,
-			saveGroups,
+			*sections,
+			selectionUi,
+			beforeRemove,
+			sortMode->current(),
 			search->getLastText().trimmed());
 		rulesTitle->setText(u"Правила (%1)"_q.arg(Rules().size()));
+		if (const auto target = std::exchange(*keepScroll, -1); target > 0) {
+			box->scrollToY(target);
+		}
 	};
+	*requestRebuild = rebuild;
 	rebuild();
 	RulesChanges() | rpl::on_next(rebuild, list->lifetime());
 	search->changes() | rpl::on_next(rebuild, search->lifetime());
+
+	sortButton->setClickedCallback([=] {
+		*sortMode = NextSortMode(sortMode->current());
+		*sortText = SortModeText(sortMode->current());
+		(*requestRebuild)();
+	});
+	selectButton->setClickedCallback([=] {
+		selectionUi->selecting = true;
+	});
+	selectAllButton->setClickedCallback([=] {
+		const auto query = search->getLastText().trimmed();
+		const auto &rules = Rules();
+		auto keys = base::flat_set<RuleKey>();
+		for (auto i = 0; i != int(rules.size()); ++i) {
+			const auto &rule = rules[i];
+			if (!MatchesQuery(rule, query)) {
+				continue;
+			}
+			for (const auto &section : *sections) {
+				// Folded groups are invisible, not a part of "select all".
+				if (GroupOfRule(rule) == section.type
+					&& section.toggles->open) {
+					keys.insert(FromRule(rule));
+					break;
+				}
+			}
+		}
+		auto allSelected = !keys.empty();
+		for (const auto &key : keys) {
+			if (!selectionUi->selected.contains(key)) {
+				allSelected = false;
+				break;
+			}
+		}
+		if (allSelected) {
+			selectionUi->selected.clear();
+		} else {
+			selectionUi->selected = std::move(keys);
+		}
+		for (const auto &[check, key] : selectionUi->checks) {
+			check->setChecked(
+				selectionUi->selected.contains(key),
+				Ui::Checkbox::NotifyAboutChange::DontNotify);
+		}
+		RefreshSelectionUi(selectionUi);
+	});
+	deleteSelectedButton->setClickedCallback([=] {
+		auto indices = std::vector<int>();
+		const auto &rules = Rules();
+		for (auto i = 0; i != int(rules.size()); ++i) {
+			if (selectionUi->selected.contains(FromRule(rules[i]))) {
+				indices.push_back(i);
+			}
+		}
+		if (indices.empty()) {
+			return;
+		}
+		box->uiShow()->show(Ui::MakeConfirmBox({
+			.text = u"Удалить выделенные правила (%1)?"_q.arg(indices.size()),
+			.confirmed = [=](Fn<void()> close) {
+				*keepScroll = box->scrollTop();
+				RemoveRuleIndices(indices);
+				selectionUi->selected.clear();
+				selectionUi->selecting = false;
+				RefreshSelectionUi(selectionUi);
+				close();
+			},
+			.confirmText = u"Удалить"_q,
+			.confirmStyle = &st::attentionBoxButton,
+		}));
+	});
+	cancelSelectionButton->setClickedCallback([=] {
+		selectionUi->selected.clear();
+		selectionUi->selecting = false;
+		for (const auto &[check, key] : selectionUi->checks) {
+			check->setChecked(
+				false,
+				Ui::Checkbox::NotifyAboutChange::DontNotify);
+		}
+		RefreshSelectionUi(selectionUi);
+	});
+
+	selectionUi->selecting.value(
+	) | rpl::on_next([=](bool on) {
+		toolbarWrap->toggle(!on, anim::type::instant);
+		selectionWrap->toggle(on, anim::type::instant);
+	}, toolbarWrap->lifetime());
 
 	const auto submit = [=] {
 		const auto text = input->getLastText().trimmed();

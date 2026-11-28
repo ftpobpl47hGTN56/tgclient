@@ -480,6 +480,7 @@ bool AddPeer(not_null<PeerData*> peer) {
 		.peer = peer->id,
 		.text = PeerName(peer),
 		.username = peer->username(),
+		.created = base::unixtime::now(),
 	});
 	Changed();
 	return true;
@@ -527,6 +528,8 @@ bool ReplaceRule(int index, Rule rule) {
 		return false;
 	}
 	rule.enabled = state.rules[index].enabled;
+	// The edited rule keeps its "added" date, it is the same rule.
+	rule.created = state.rules[index].created;
 	const auto existing = FindRule(state, rule);
 	if (existing >= 0 && existing != index) {
 		// Became the same as another rule: keep just that one.
@@ -676,6 +679,29 @@ void RemoveRule(int index) {
 		return;
 	}
 	rules.erase(begin(rules) + index);
+	Changed();
+}
+
+void RemoveRuleIndices(const std::vector<int> &indices) {
+	auto &state = Instance();
+	auto &rules = state.rules;
+	auto remove = base::flat_set<int>();
+	for (const auto index : indices) {
+		if (index >= 0 && index < int(rules.size())) {
+			remove.insert(index);
+		}
+	}
+	if (remove.empty()) {
+		return;
+	}
+	auto kept = std::vector<Rule>();
+	kept.reserve(rules.size() - remove.size());
+	for (auto i = 0; i != int(rules.size()); ++i) {
+		if (!remove.contains(i)) {
+			kept.push_back(std::move(rules[i]));
+		}
+	}
+	state.rules = std::move(kept);
 	Changed();
 }
 
